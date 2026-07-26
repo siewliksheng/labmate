@@ -1,24 +1,41 @@
 # Lab memory
 
-Landing in M2. Four tiers, matching the general memory-architecture design
-this project is meant to teach:
+Implemented in M2. Four tiers, matching the general memory-architecture
+design this project is meant to teach; the actual code lives in
+`src/labmate/memory/`, not here — this file is the design record.
 
 | Tier | Scope | Store |
 |---|---|---|
 | Working | this conversation turn | the model's context window |
 | Episodic | this session | per-session scratch state |
-| Semantic | across sessions | Postgres + pgvector — past Q&A, past image analyses paired with human-confirmed labels |
-| Procedural | learned lab-specific behavior | the SOP/handbook corpus, and later, patterns distilled from HITL corrections (M4) |
+| Semantic | across sessions | SQLite (`var/labmate_memory.db`) — past Q&A, past image analyses + human-confirmed labels |
+| Procedural | learned lab-specific behavior | the hand-authored SOP handbook (`data/sop_handbook/*.md`); HITL-distilled patterns are M4 |
 
-## Write policy (design questions to answer when this lands)
+## Design questions this file originally left open — now answered
 
-- What earns a memory? (Every image analysis? Only ones a human confirmed?)
-- Retrieval precision: wrong-memory recall is worse than no memory — how is
-  that measured before this ships?
-- Conflict resolution: a sample re-imaged a week later with a different
-  result — does the old entry get superseded, or does the agent need to
-  reason about the trend?
-- Decay: does anything ever get demoted or removed, and on what basis?
+- **What earns a memory?** Everything. Every completed exchange
+  (`record_qa`) and every image analysis (`record_image_analysis`) is
+  written automatically, unconditionally. The model is never asked
+  whether something is "worth remembering" — that decision is a failure
+  mode waiting to happen (it can skip something important), and retrieval
+  precision is handled at read time instead (ranking + `max_results`).
+- **Retrieval precision.** Currently SQL `LIKE` keyword matching, not
+  embeddings — see `store.py`'s module docstring for why an embeddings
+  dependency isn't justified yet. This is a real limitation: it can miss
+  paraphrases and (per `sop_handbook.py`) can surface a low-relevance
+  match on a common word. Known, not hidden; revisit if it causes an
+  actual bad decision, not preemptively.
+- **Conflict resolution.** Not yet handled for image analyses — a sample
+  re-imaged later with a different result is just a second row; nothing
+  currently reasons about the trend between them. This is a real gap to
+  close, most likely in M4 when human-confirmed labels start attaching to
+  these records and a trend actually matters for triage.
+- **Decay.** Q&A and image-analysis history never expire — only
+  environmental state does, by design, because it represents "is this
+  still true right now," which Q&A history and past labels don't. See
+  `get_environmental_state`: an expired or never-logged entry returns
+  `found: false`, never the stale last-known value.
 
-Retrieval must be just-in-time (the agent searches memory via a tool) —
-never pre-loaded wholesale into context. See `docs/architecture.md`.
+Retrieval is just-in-time everywhere (the agent calls a search tool; see
+each specialist's `TOOL_SCHEMAS` in `src/labmate/specialists/`) — nothing
+is pre-loaded wholesale into context. See `docs/architecture.md`.

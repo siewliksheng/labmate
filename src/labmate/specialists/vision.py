@@ -6,8 +6,15 @@ VISION_HAZARD_SCAN_PROMPT below; mcp_server/tools.py imports these). Image
 bytes never enter this specialist's own conversation context -- only the
 tool's structured text findings do, which keeps the outer loop's context
 small and keeps the vision capability isolated behind one tool boundary
-(see docs/architecture.md). The specialist still never issues a
-safe/unsafe verdict itself; M2 adds comparison against labeled history,
+(see docs/architecture.md). analyze_image also records every analysis to
+memory automatically (see labmate.memory.store).
+
+M2 adds search_past_image_analyses so a new analysis can be compared
+against labeled history instead of judged in isolation -- e.g. "the last
+three flasks with this discoloration pattern were confirmed contaminated"
+is a materially different signal than a first-time observation, even
+though this specialist still isn't the one deciding what that signal
+means. The specialist still never issues a safe/unsafe verdict itself;
 M3 makes "no verdict from this specialist" a code-enforced rule rather
 than a prompt instruction.
 """
@@ -34,10 +41,14 @@ inference belongs to the safety gate, not to you.
 
 SYSTEM_PROMPT = """\
 A lab member wants to know what a sample image shows. Call analyze_image \
-with the image path they gave you. Relay both the descriptive findings \
-and the hazard-scan findings plainly, as separate observations. Never \
-synthesize the two into a single safe/unsafe verdict -- say that any \
-hazard implication needs the safety specialist or a human to confirm.
+with the image path they gave you. Then call search_past_image_analyses \
+with a short description of what you found, to check whether similar \
+samples have been seen and labeled before -- mention any relevant match \
+explicitly, including its human_label if one is set. Relay the \
+descriptive findings, the hazard-scan findings, and any relevant past \
+match plainly, as separate observations. Never synthesize these into a \
+single safe/unsafe verdict -- say that any hazard implication needs the \
+safety specialist or a human to confirm.
 """
 
-TOOL_SCHEMAS = [t for t in _ALL_TOOLS if t["name"] == "analyze_image"]
+TOOL_SCHEMAS = [t for t in _ALL_TOOLS if t["name"] in {"analyze_image", "search_past_image_analyses"}]

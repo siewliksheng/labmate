@@ -1,10 +1,13 @@
-"""M1: the agent loop, now with real tool calling.
+"""M1/M2: the agent loop, with real tool calling and automatic memory writes.
 
 Still one Anthropic Messages-API loop shared by every specialist -- what
 differs per specialist is its system prompt and which tool subset it's
 given (see specialists/*.py). Routing is still the M0 hardcoded keyword net
 (orchestrator.py); a real LLM router replaces it in M5, alongside the M0
 net, not instead of it.
+
+Every completed exchange is recorded to memory unconditionally (see
+labmate.memory.store's module docstring for why writes aren't selective).
 """
 
 import argparse
@@ -13,6 +16,7 @@ import json
 from anthropic import Anthropic
 
 from labmate.mcp_server.tools import dispatch_tool
+from labmate.memory.store import record_qa
 from labmate.orchestrator import route
 from labmate.specialists import literature, safety, vision
 
@@ -48,6 +52,7 @@ def run(user_input: str, image_path: str | None = None) -> str:
 
         if response.stop_reason != "tool_use":
             text = "".join(block.text for block in response.content if block.type == "text")
+            record_qa(specialist_name, user_input, text)
             return f"[routed to: {specialist_name}]\n{text}"
 
         tool_results = []

@@ -18,12 +18,19 @@ portfolio artifact — not just whatever the code looks like at the end.
       `var/spans.jsonl` so tracing is provably working with zero external
       accounts. All non-network behavior + the live network calls are
       covered by `tests/test_tools.py` (network cases marked `@pytest.mark.network`).
-- [ ] **M2 — Lab memory** _(context engineering, memory)_
-      Past Q&A, past image analyses + human-confirmed labels, a written SOP
-      handbook corpus, **and dynamic environmental state** (e.g. "bench 2
-      has an active Bunsen burner as of 14:02, logged by user X, TTL 2h") —
-      all retrieved just-in-time, never pre-loaded whole. Environmental
-      state entries expire; expired state reads as "unknown", never "safe".
+- [x] **M2 — Lab memory** _(context engineering, memory)_
+      `search_past_qa`, `search_past_image_analyses`, `search_sop_handbook`,
+      `log_environmental_state` / `get_environmental_state` — SQLite locally
+      (`var/labmate_memory.db`) rather than the Postgres/pgvector named as
+      the eventual production backend, and keyword (SQL `LIKE`) retrieval
+      rather than embeddings, since neither swap is justified yet (see
+      `labmate/memory/store.py`). Every completed exchange and every image
+      analysis is recorded automatically — no model-decided write policy.
+      Environmental state entries expire (`ttl_hours`); an expired or
+      never-logged entry reads as `found: false`, never as "still safe."
+      The SOP handbook (`memory/data/sop_handbook/*.md`) is hand-authored
+      and directly grounds 3 of the 5 red-team scenarios. Covered by
+      `tests/test_memory.py` (11 tests, no network required).
 - [ ] **M3 — The safety gate** _(guardrails, permissions)_
       Groundedness checks on every specialist's output; a code-enforced
       escalation threshold (not a prompt instruction); permission tiers
@@ -48,4 +55,4 @@ portfolio artifact — not just whatever the code looks like at the end.
       trace replay/fork debugger; wire a CI gate that fails the build if
       escalation recall regresses.
 
-Currently on: **M1 complete → building M2.**
+Currently on: **M2 complete → building M3.**

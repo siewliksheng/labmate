@@ -43,9 +43,10 @@ artifact, not just the final state. Full detail and current status in
 | M5 | LangGraph orchestrator | Orchestration |
 | M6 | Formalize the harness | Harness (capstone) |
 
-**Current status: M1 complete.** Literature search (PubMed + preprints),
-GHS safety-data lookup, and biosafety-level lookup are live against real
-public APIs today, no framework needed — try it with no API key at all:
+**Current status: M2 complete.** Literature search (PubMed + preprints),
+GHS safety-data lookup, biosafety-level lookup, the SOP handbook, and
+environmental-state tracking are all live today, no framework and no API
+key needed:
 
 ```bash
 uv sync
@@ -53,11 +54,16 @@ PYTHONPATH=src python -c "
 from labmate.mcp_server.tools import dispatch_tool
 print(dispatch_tool('lookup_sds', {'substance': 'formaldehyde'}))
 print(dispatch_tool('search_pubmed', {'query': 'lipid nanoparticle CRISPR delivery', 'max_results': 3}))
+print(dispatch_tool('search_sop_handbook', {'query': 'formaldehyde disposal'}))
+dispatch_tool('log_environmental_state', {'bench': 'bench-2', 'description': 'active Bunsen burner', 'logged_by': 'alex'})
+print(dispatch_tool('get_environmental_state', {'bench': 'bench-2'}))
 "
 ```
 
-Every call above writes a traced span to `var/spans.jsonl` — no Langfuse
-account required to see tracing working (see `src/labmate/observability.py`).
+Every call above writes a traced span to `var/spans.jsonl` and, where
+relevant, a row to `var/labmate_memory.db` — no Langfuse account or
+Postgres instance required to see tracing and memory working (see
+`src/labmate/observability.py` and `src/labmate/memory/store.py`).
 
 ## Architecture
 
@@ -147,14 +153,16 @@ what actually happened.
 
 ```
 src/labmate/
-  agent.py               # the active agent loop (real tool-calling as of M1)
+  agent.py               # the active agent loop -- real tools (M1) + auto memory writes (M2)
   orchestrator.py         # M0 hardcoded routing -- kept as a deterministic
                           # safety net even after M5's LangGraph router ships
   observability.py         # M1: OTel tracing, Langfuse if configured else local
   paths.py                  # shared local-artifact paths (var/)
   guardrails.py           # M3: the enforced escalation gate (stub for now)
-  specialists/            # literature, vision, safety -- M1 prompts + tool subsets
-  mcp_server/              # M1: real tool implementations + MCP server
+  specialists/            # literature, vision, safety -- prompts + tool subsets
+  mcp_server/              # tool schemas/implementations + MCP server
+  memory/                  # M2: SQLite store (Q&A, image analyses, environmental
+                          # state) + the hand-authored SOP handbook
 docs/
   architecture.md          # critical assessment + design rationale
   system_prompts.md        # target full prompts (router, gate, vision)
@@ -162,6 +170,6 @@ docs/
 evals/
   redteam_safety/           # the 5 adversarial safety scenarios
   golden_set/                # literature + vision ground truth (M4)
-memory/                      # lab memory design notes (M2)
+memory/                      # lab memory design notes (implementation: src/labmate/memory/)
 traces/                       # exported example runs (M1+)
 ```

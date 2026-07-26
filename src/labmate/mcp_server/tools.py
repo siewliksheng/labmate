@@ -1,13 +1,16 @@
-"""M1: real tool implementations, traced via labmate.observability.
+"""M1/M2: real tool implementations, traced via labmate.observability.
 
 Design notes worth keeping as this evolves further:
-- lookup_sds / lookup_biosafety_level return found: false rather than
-  guessing when there's no match -- see docs/architecture.md, "absence of
-  a match is not the same as clearance." A caller (or the M3 gate, later)
-  must treat found: false as unresolved.
+- lookup_sds / lookup_biosafety_level / get_environmental_state /
+  search_sop_handbook all return found: false rather than guessing when
+  there's no match -- see docs/architecture.md, "absence of a match is
+  not the same as clearance." A caller (or the M3 gate, later) must treat
+  found: false as unresolved.
 - analyze_image never returns a safe/unsafe verdict, only two independent
   passes' raw findings -- that framing decision belongs to the safety
-  gate (M3), not to this tool or the vision specialist.
+  gate (M3), not to this tool or the vision specialist. It records what it
+  found to memory (M2) so a future analysis of a similar sample can be
+  compared against labeled history, not just judged in isolation.
 - escalate_to_safety_officer logs to a local file for now (var/, never
   committed); M4 replaces the storage layer with a real review-queue DB
   and builds a UI on top, but the tool's interface doesn't need to change.
@@ -19,6 +22,12 @@ from typing import Any
 
 import httpx
 
+from labmate.memory.sop_handbook import search_sop_handbook as _search_sop_handbook
+from labmate.memory.store import get_environmental_state as _get_environmental_state
+from labmate.memory.store import log_environmental_state as _log_environmental_state
+from labmate.memory.store import record_image_analysis
+from labmate.memory.store import search_past_image_analyses as _search_past_image_analyses
+from labmate.memory.store import search_past_qa as _search_past_qa
 from labmate.observability import traced_tool_call
 from labmate.paths import VAR_DIR
 
@@ -88,6 +97,65 @@ TOOL_SCHEMAS = [
             "type": "object",
             "properties": {"organism_or_sample": {"type": "string"}},
             "required": ["organism_or_sample"],
+        },
+    },
+    {
+        "name": "search_sop_handbook",
+        "description": "Search the lab's SOP handbook for guidance relevant to a query. Returns matching excerpts with their source file, not the whole handbook. Returns no results if nothing matches -- treat that as unresolved, not as 'no restrictions apply.'",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "max_results": {"type": "integer", "default": 3},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "log_environmental_state",
+        "description": "Record a current environmental condition at a bench/location (e.g. an active heat source, an in-progress procedure). Entries expire after ttl_hours -- log real conditions, not permanent facts about the bench.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "bench": {"type": "string"},
+                "description": {"type": "string"},
+                "logged_by": {"type": "string"},
+                "ttl_hours": {"type": "number", "default": 2.0},
+            },
+            "required": ["bench", "description", "logged_by"],
+        },
+    },
+    {
+        "name": "get_environmental_state",
+        "description": "Look up the current logged environmental state for a bench/location. Returns found: false if nothing is logged, or if the last entry expired -- an expired entry means unknown, never 'still safe.'",
+        "input_schema": {
+            "type": "object",
+            "properties": {"bench": {"type": "string"}},
+            "required": ["bench"],
+        },
+    },
+    {
+        "name": "search_past_qa",
+        "description": "Search this lab's history of past questions and answers for anything relevant to the current one -- useful for noticing 'we saw something like this before.'",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "max_results": {"type": "integer", "default": 5},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "search_past_image_analyses",
+        "description": "Search past sample-image analyses (and any human-confirmed labels attached to them) for comparison against the current one -- grounds a new analysis against labeled history instead of judging it in isolation.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "max_results": {"type": "integer", "default": 5},
+            },
+            "required": ["query"],
         },
     },
     {
@@ -249,10 +317,14 @@ def _analyze_image(image_path: str):
         )
         return "".join(block.text for block in response.content if block.type == "text")
 
+    description = _pass(VISION_DESCRIPTIVE_PROMPT)
+    hazard_scan_findings = _pass(VISION_HAZARD_SCAN_PROMPT)
+    record_image_analysis(image_path, description, hazard_scan_findings)
+
     return {
         "found": True,
-        "description": _pass(VISION_DESCRIPTIVE_PROMPT),
-        "hazard_scan_findings": _pass(VISION_HAZARD_SCAN_PROMPT),
+        "description": description,
+        "hazard_scan_findings": hazard_scan_findings,
     }
 
 
@@ -364,5 +436,10 @@ _HANDLERS = {
     "analyze_image": _analyze_image,
     "lookup_sds": _lookup_sds,
     "lookup_biosafety_level": _lookup_biosafety_level,
+    "search_sop_handbook": _search_sop_handbook,
+    "log_environmental_state": _log_environmental_state,
+    "get_environmental_state": _get_environmental_state,
+    "search_past_qa": _search_past_qa,
+    "search_past_image_analyses": _search_past_image_analyses,
     "escalate_to_safety_officer": _escalate_to_safety_officer,
 }
