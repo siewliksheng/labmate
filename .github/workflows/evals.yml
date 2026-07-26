@@ -1,0 +1,20 @@
+name: evals
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test-and-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync --all-extras
+      - name: unit tests
+        run: uv run pytest tests/ -v
+      # TODO: once the golden set + baseline scores exist, add a step here
+      # that runs the eval suite and fails the build on regression against
+      # evals/results.md (this is the "fails CI on regression" story from
+      # the README, not just a demo).

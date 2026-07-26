@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+*.egg-info/
+dist/
+build/
+
+# never commit real patient data
+data/raw/
+data/mimic/
+*.phi.json
+
+# traces may contain sensitive content pre-scrub — only commit reviewed exports
+traces/*.raw.json
