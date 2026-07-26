@@ -10,6 +10,11 @@ from labmate.mcp_server.tools import _HANDLERS, TOOL_SCHEMAS
 
 mcp = FastMCP("labmate")
 
+# NOTE: this registers the raw handlers directly, bypassing dispatch_tool's
+# tracing/error-handling wrapper in tools.py -- calls made through this MCP
+# server (e.g. from Claude Desktop) are not currently traced the way calls
+# through agent.py's own loop are. Left as a known gap rather than silently
+# assumed away; worth fixing if the MCP path becomes a primary entry point.
 for schema in TOOL_SCHEMAS:
     name = schema["name"]
     handler = _HANDLERS[name]

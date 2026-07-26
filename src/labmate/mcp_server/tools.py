@@ -1,26 +1,34 @@
-"""Tool schemas for M1 onward, exposed both to the plain agent loop and as an
-MCP server (server.py). Not called yet in M0 -- the orchestrator/specialists
-currently run with TOOL_SCHEMAS = [] (see specialists/*.py).
+"""M1: real tool implementations, traced via labmate.observability.
 
-Design notes to keep in mind as these get implemented:
-- escalate_to_safety_officer exists from the start of M1, before the gate
-  that enforces its use lands in M3 -- the tool being available is not the
-  same as its use being guaranteed, which is exactly why the M3 code-level
-  gate is necessary rather than optional.
-- lookup_sds / lookup_biosafety_level return grounding passages, never a
-  bare verdict -- the specialist must quote what it found, not summarize it
-  into a confident-sounding conclusion.
-- analyze_image returns a description + confidence signal, never a binary
-  safe/unsafe classification -- that framing decision belongs to the
-  safety gate, not to the vision specialist.
+Design notes worth keeping as this evolves further:
+- lookup_sds / lookup_biosafety_level return found: false rather than
+  guessing when there's no match -- see docs/architecture.md, "absence of
+  a match is not the same as clearance." A caller (or the M3 gate, later)
+  must treat found: false as unresolved.
+- analyze_image never returns a safe/unsafe verdict, only two independent
+  passes' raw findings -- that framing decision belongs to the safety
+  gate (M3), not to this tool or the vision specialist.
+- escalate_to_safety_officer logs to a local file for now (var/, never
+  committed); M4 replaces the storage layer with a real review-queue DB
+  and builds a UI on top, but the tool's interface doesn't need to change.
 """
 
+import json
+from pathlib import Path
 from typing import Any
+
+import httpx
+
+from labmate.observability import traced_tool_call
+from labmate.paths import VAR_DIR
+
+_BIOSAFETY_DATA_PATH = Path(__file__).parent / "data" / "biosafety_levels.json"
+_HTTP_TIMEOUT = 10.0
 
 TOOL_SCHEMAS = [
     {
         "name": "search_pubmed",
-        "description": "Search PubMed for recent papers on a topic. Returns titles, IDs, and short summaries -- call fetch_abstract for full text of a specific result.",
+        "description": "Search PubMed for recent papers on a topic. Returns titles, PMIDs, journal, and date -- call fetch_abstract for the full abstract text of a specific result.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -31,8 +39,17 @@ TOOL_SCHEMAS = [
         },
     },
     {
+        "name": "fetch_abstract",
+        "description": "Fetch the full abstract text for a PubMed ID. Use this before citing a specific paper's findings -- a title alone is not enough to ground a claim.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"pmid": {"type": "string"}},
+            "required": ["pmid"],
+        },
+    },
+    {
         "name": "search_biorxiv",
-        "description": "Search bioRxiv/medRxiv preprints for a topic. Same return shape as search_pubmed.",
+        "description": "Search preprints (bioRxiv, medRxiv, and other servers indexed by Europe PMC) for a topic. Returns title, source server, date, and abstract text directly.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -45,9 +62,9 @@ TOOL_SCHEMAS = [
     {
         "name": "analyze_image",
         "description": (
-            "Analyze a lab sample image (microscopy, culture plate, blot). "
-            "Returns a structured description and a confidence score -- "
-            "never a safe/unsafe verdict, which is not this tool's job."
+            "Analyze a lab sample image (microscopy, culture plate, blot) in two independent passes: "
+            "a descriptive pass and a hazard-scan pass covering edges/background. "
+            "Never returns a safe/unsafe verdict, which is not this tool's job."
         ),
         "input_schema": {
             "type": "object",
@@ -57,7 +74,7 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "lookup_sds",
-        "description": "Retrieve the safety data sheet (GHS hazard classes, handling, disposal) for a named substance. Returns the source passage, not a summary.",
+        "description": "Retrieve GHS hazard classification (pictograms, hazard statements) for a named substance from PubChem. Returns found: false if there's no matching entry -- treat that as unresolved, not as non-hazardous.",
         "input_schema": {
             "type": "object",
             "properties": {"substance": {"type": "string"}},
@@ -66,7 +83,7 @@ TOOL_SCHEMAS = [
     },
     {
         "name": "lookup_biosafety_level",
-        "description": "Look up the required biosafety level and handling protocol for a named organism or sample type.",
+        "description": "Look up the required biosafety level for a named organism or sample type from a curated reference table. Returns found: false if there's no matching entry -- treat that as unresolved, not as low-risk.",
         "input_schema": {
             "type": "object",
             "properties": {"organism_or_sample": {"type": "string"}},
@@ -76,10 +93,9 @@ TOOL_SCHEMAS = [
     {
         "name": "escalate_to_safety_officer",
         "description": (
-            "Hand off a safety question to a human safety officer instead "
-            "of answering it directly. Use whenever no retrieved SDS/"
-            "protocol unambiguously covers the situation, or the query "
-            "implies physical risk you are not certain about."
+            "Hand off a safety question to a human safety officer instead of answering it directly. "
+            "Use whenever no retrieved SDS/protocol unambiguously covers the situation, a lookup "
+            "returned found: false, or the query implies physical risk you are not certain about."
         ),
         "input_schema": {
             "type": "object",
@@ -97,35 +113,253 @@ def dispatch_tool(name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
     handler = _HANDLERS.get(name)
     if handler is None:
         return {"error": f"Unknown tool '{name}'. Available: {list(_HANDLERS)}"}
-    return handler(**tool_input)
+
+    attrs = {f"input.{k}": v for k, v in tool_input.items()}
+    with traced_tool_call(name, **attrs) as span:
+        try:
+            result = handler(**tool_input)
+        except Exception as exc:
+            span.set_attribute("error", str(exc))
+            return {"error": f"{name} failed: {exc}"}
+        if isinstance(result, dict):
+            span.set_attribute("output.keys", ",".join(result.keys()))
+        return result
 
 
 def _search_pubmed(query: str, max_results: int = 10):
-    raise NotImplementedError  # M1: call NCBI E-utilities esearch/esummary
+    with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+        search_resp = client.get(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
+            params={"db": "pubmed", "term": query, "retmax": max_results, "retmode": "json"},
+        )
+        search_resp.raise_for_status()
+        ids = search_resp.json()["esearchresult"]["idlist"]
+        if not ids:
+            return {"results": [], "note": "No PubMed results for this query."}
+
+        summary_resp = client.get(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi",
+            params={"db": "pubmed", "id": ",".join(ids), "retmode": "json"},
+        )
+        summary_resp.raise_for_status()
+        summary = summary_resp.json()["result"]
+
+    results = [
+        {
+            "pmid": pmid,
+            "title": summary.get(pmid, {}).get("title", ""),
+            "journal": summary.get(pmid, {}).get("fulljournalname", ""),
+            "pubdate": summary.get(pmid, {}).get("pubdate", ""),
+            "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
+        }
+        for pmid in ids
+    ]
+    return {"results": results}
+
+
+def _fetch_abstract(pmid: str):
+    with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+        resp = client.get(
+            "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
+            params={"db": "pubmed", "id": pmid, "rettype": "abstract", "retmode": "text"},
+        )
+        resp.raise_for_status()
+
+    text = resp.text.strip()
+    if not text:
+        return {"pmid": pmid, "found": False, "note": "No abstract text returned for this PMID."}
+    return {
+        "pmid": pmid,
+        "found": True,
+        "abstract_text": text,
+        "url": f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
+    }
 
 
 def _search_biorxiv(query: str, max_results: int = 10):
-    raise NotImplementedError  # M1: call the bioRxiv/medRxiv API
+    # Europe PMC's SRC:PPR covers all preprint servers it indexes (bioRxiv,
+    # medRxiv, and others) -- there is no bioRxiv-only public search API, so
+    # this is the honest scope of what this tool actually searches.
+    with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+        resp = client.get(
+            "https://www.ebi.ac.uk/europepmc/webservices/rest/search",
+            params={
+                "query": f"({query}) AND SRC:PPR",
+                "format": "json",
+                "pageSize": max_results,
+                "resultType": "core",
+            },
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+    results = [
+        {
+            "id": entry.get("id"),
+            "title": entry.get("title", ""),
+            "source": entry.get("source", ""),
+            "first_publication_date": entry.get("firstPublicationDate", ""),
+            "abstract_text": entry.get("abstractText", ""),
+            "doi": entry.get("doi", ""),
+        }
+        for entry in data.get("resultList", {}).get("result", [])
+    ]
+    if not results:
+        return {"results": [], "note": "No preprint results for this query."}
+    return {"results": results}
 
 
 def _analyze_image(image_path: str):
-    raise NotImplementedError  # M1: Claude vision call + structured output
+    import base64
+
+    from anthropic import Anthropic
+
+    from labmate.specialists.vision import VISION_DESCRIPTIVE_PROMPT, VISION_HAZARD_SCAN_PROMPT
+
+    path = Path(image_path)
+    if not path.exists():
+        return {"found": False, "note": f"Image file not found at {image_path}"}
+
+    media_type = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+    }.get(path.suffix.lower(), "image/jpeg")
+    image_b64 = base64.standard_b64encode(path.read_bytes()).decode()
+
+    client = Anthropic()
+
+    def _pass(prompt_text: str) -> str:
+        response = client.messages.create(
+            model="claude-sonnet-5",
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {"type": "base64", "media_type": media_type, "data": image_b64},
+                        },
+                        {"type": "text", "text": prompt_text},
+                    ],
+                }
+            ],
+        )
+        return "".join(block.text for block in response.content if block.type == "text")
+
+    return {
+        "found": True,
+        "description": _pass(VISION_DESCRIPTIVE_PROMPT),
+        "hazard_scan_findings": _pass(VISION_HAZARD_SCAN_PROMPT),
+    }
 
 
-def _lookup_sds(substance: str):
-    raise NotImplementedError  # M1: PubChem GHS lookup
+def _load_biosafety_entries():
+    return json.loads(_BIOSAFETY_DATA_PATH.read_text(encoding="utf-8"))["entries"]
 
 
 def _lookup_biosafety_level(organism_or_sample: str):
-    raise NotImplementedError  # M1: local biosafety-level reference table
+    query = organism_or_sample.strip().lower()
+    for entry in _load_biosafety_entries():
+        if any(alias in query or query in alias for alias in entry["aliases"]):
+            return {
+                "found": True,
+                "matched_alias": entry["aliases"][0],
+                "level": entry["level"],
+                "notes": entry["notes"],
+                "source": entry["source"],
+            }
+    return {
+        "found": False,
+        "organism_or_sample": organism_or_sample,
+        "note": "No entry in the local biosafety reference table -- treat as unresolved, not as low-risk.",
+    }
+
+
+def _lookup_sds(substance: str):
+    with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
+        cid_resp = client.get(
+            f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{substance}/cids/JSON"
+        )
+        if cid_resp.status_code == 404:
+            return {
+                "found": False,
+                "substance": substance,
+                "note": "No PubChem entry for this name -- treat as unresolved, not as non-hazardous.",
+            }
+        cid_resp.raise_for_status()
+        cid = cid_resp.json()["IdentifierList"]["CID"][0]
+
+        view_resp = client.get(
+            f"https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/{cid}/JSON",
+            params={"heading": "GHS Classification"},
+        )
+        if view_resp.status_code == 404:
+            return {
+                "found": False,
+                "substance": substance,
+                "cid": cid,
+                "note": "No GHS Classification section for this compound -- treat as unresolved.",
+            }
+        view_resp.raise_for_status()
+        data = view_resp.json()
+
+    statements: list[str] = []
+    pictograms: list[str] = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            name = node.get("Name", "")
+            value = node.get("Value", {})
+            if "StringWithMarkup" in value:
+                text_items = [s.get("String", "") for s in value["StringWithMarkup"]]
+                if "Pictogram" in name:
+                    pictograms.extend(text_items)
+                elif "Hazard Statements" in name:
+                    statements.extend(text_items)
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(data)
+
+    return {
+        "found": True,
+        "substance": substance,
+        "cid": cid,
+        "hazard_statements": statements,
+        "pictograms": pictograms,
+        "source_url": f"https://pubchem.ncbi.nlm.nih.gov/compound/{cid}",
+    }
 
 
 def _escalate_to_safety_officer(summary: str, urgency: str):
-    raise NotImplementedError  # M1: log to the review queue (M4 builds the UI on top)
+    from datetime import datetime, timezone
+
+    VAR_DIR.mkdir(exist_ok=True, parents=True)
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "summary": summary,
+        "urgency": urgency,
+        "status": "pending",
+    }
+    with (VAR_DIR / "escalations.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+    return {
+        "escalated": True,
+        "queued_at": entry["timestamp"],
+        "note": "Logged to the local review queue (var/escalations.jsonl). M4 builds the real review UI on top of this store.",
+    }
 
 
 _HANDLERS = {
     "search_pubmed": _search_pubmed,
+    "fetch_abstract": _fetch_abstract,
     "search_biorxiv": _search_biorxiv,
     "analyze_image": _analyze_image,
     "lookup_sds": _lookup_sds,

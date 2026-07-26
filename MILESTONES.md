@@ -8,9 +8,16 @@ portfolio artifact — not just whatever the code looks like at the end.
       One Anthropic Messages-API loop, shared by all specialists. Routing is
       a hardcoded keyword check. No tools yet — specialists answer from the
       model's own knowledge and are explicitly told to disclaim that.
-- [ ] **M1 — Real tools + tracing** _(tool design, observability)_
-      `search_pubmed`, `search_biorxiv`, `analyze_image`, `lookup_sds`,
-      `lookup_biosafety_level`. OpenTelemetry spans → Langfuse on every call.
+- [x] **M1 — Real tools + tracing** _(tool design, observability)_
+      `search_pubmed` + `fetch_abstract` (NCBI E-utilities), `search_biorxiv`
+      (Europe PMC, scoped to preprint servers), `analyze_image` (two-pass
+      Claude vision), `lookup_sds` (PubChem GHS), `lookup_biosafety_level`
+      (curated local table), `escalate_to_safety_officer` (local review
+      queue, `var/escalations.jsonl`). Every call gets an OTel span —
+      exports to Langfuse if credentials are set, otherwise falls back to
+      `var/spans.jsonl` so tracing is provably working with zero external
+      accounts. All non-network behavior + the live network calls are
+      covered by `tests/test_tools.py` (network cases marked `@pytest.mark.network`).
 - [ ] **M2 — Lab memory** _(context engineering, memory)_
       Past Q&A, past image analyses + human-confirmed labels, a written SOP
       handbook corpus, **and dynamic environmental state** (e.g. "bench 2
@@ -41,4 +48,4 @@ portfolio artifact — not just whatever the code looks like at the end.
       trace replay/fork debugger; wire a CI gate that fails the build if
       escalation recall regresses.
 
-Currently on: **M0 complete → building M1.**
+Currently on: **M1 complete → building M2.**

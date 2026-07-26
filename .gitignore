@@ -13,3 +13,7 @@ data/real_lab/
 
 # traces may contain sensitive content pre-scrub — only commit reviewed exports
 traces/*.raw.json
+
+# local runtime artifacts: escalation queue log, fallback span export
+# (M1) -- never committed, see src/labmate/paths.py
+var/

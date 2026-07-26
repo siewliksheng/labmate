@@ -1,0 +1,47 @@
+{
+  "_note": "No simple public REST API exists for BSL lookups (unlike PubChem for GHS data), so this is a small hand-authored reference table -- see README 'Data'. Extend it deliberately; an organism missing from here must resolve as found:false, not as BSL-1-by-default.",
+  "entries": [
+    {
+      "aliases": ["escherichia coli k-12", "e. coli k-12", "e coli k12"],
+      "level": "BSL-1",
+      "notes": "Standard microbiological practices; non-pathogenic laboratory strain.",
+      "source": "BMBL 6th Edition (CDC/NIH), Appendix B"
+    },
+    {
+      "aliases": ["staphylococcus aureus", "s. aureus"],
+      "level": "BSL-2",
+      "notes": "Standard precautions for organisms associated with human disease of moderate potential hazard.",
+      "source": "BMBL 6th Edition, Section VIII-A"
+    },
+    {
+      "aliases": ["mycobacterium tuberculosis", "m. tuberculosis", "tb"],
+      "level": "BSL-3",
+      "notes": "Requires controlled access, directional airflow, and respiratory protection for aerosol-generating procedures.",
+      "source": "BMBL 6th Edition, Section VIII-C"
+    },
+    {
+      "aliases": ["bacillus anthracis", "anthrax"],
+      "level": "BSL-3",
+      "notes": "Federal Select Agent; requires BSL-3 practices plus additional biosecurity controls.",
+      "source": "BMBL 6th Edition, Section VIII-C; Federal Select Agent Program"
+    },
+    {
+      "aliases": ["sars-cov-2", "sars cov 2", "covid-19 virus"],
+      "level": "BSL-2 (BSL-3 practices for aerosol-generating procedures)",
+      "notes": "Follow institutional biosafety committee guidance; higher containment recommended for viral culture or aerosol-generating work.",
+      "source": "CDC/NIH interim guidance; BMBL 6th Edition"
+    },
+    {
+      "aliases": ["human immunodeficiency virus", "hiv"],
+      "level": "BSL-2/BSL-3 practices",
+      "notes": "BSL-2 standard practices, with BSL-3 practices for activities with increased aerosol or droplet potential.",
+      "source": "BMBL 6th Edition, Section VIII-E"
+    },
+    {
+      "aliases": ["replication-deficient adenovirus vector", "adenovirus vector", "ad vector"],
+      "level": "depends on insert -- consult IBC",
+      "notes": "Risk group depends entirely on the transgene being delivered; this is not a fixed BSL and must be reviewed per-construct.",
+      "source": "NIH Guidelines for Research Involving Recombinant or Synthetic Nucleic Acid Molecules"
+    }
+  ]
+}

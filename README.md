@@ -43,7 +43,21 @@ artifact, not just the final state. Full detail and current status in
 | M5 | LangGraph orchestrator | Orchestration |
 | M6 | Formalize the harness | Harness (capstone) |
 
-**Current status: M0 complete.**
+**Current status: M1 complete.** Literature search (PubMed + preprints),
+GHS safety-data lookup, and biosafety-level lookup are live against real
+public APIs today, no framework needed — try it with no API key at all:
+
+```bash
+uv sync
+PYTHONPATH=src python -c "
+from labmate.mcp_server.tools import dispatch_tool
+print(dispatch_tool('lookup_sds', {'substance': 'formaldehyde'}))
+print(dispatch_tool('search_pubmed', {'query': 'lipid nanoparticle CRISPR delivery', 'max_results': 3}))
+"
+```
+
+Every call above writes a traced span to `var/spans.jsonl` — no Langfuse
+account required to see tracing working (see `src/labmate/observability.py`).
 
 ## Architecture
 
@@ -109,7 +123,12 @@ Claude Sonnet 5 (vision + reasoning) + Haiku 4.5 (routing) · MCP (FastMCP)
 · LangGraph (M5) · Langfuse + OpenTelemetry · Postgres + pgvector · Inspect
 AI (M4) · a small review-queue UI (M4)
 
-## Running it (M0)
+## Running it
+
+Tool calls that only need public APIs (`search_pubmed`, `fetch_abstract`,
+`search_biorxiv`, `lookup_sds`, `lookup_biosafety_level`) work with **no
+API key**, as shown above. The full conversational loop and
+`analyze_image` need an Anthropic key:
 
 ```bash
 uv sync
@@ -119,16 +138,23 @@ uv run python -m labmate.agent "is this reagent dangerous if I spill it?"
 uv run python -m labmate.agent "what is this?" --image path/to/sample.jpg
 ```
 
+There is no visual UI yet — that's M4's review-queue app. Until then,
+"previewing" this project means running the CLI/tool calls above, or
+reading `var/spans.jsonl` and `var/escalations.jsonl` after a run to see
+what actually happened.
+
 ## Project layout
 
 ```
 src/labmate/
-  agent.py               # M0: the active agent loop
+  agent.py               # the active agent loop (real tool-calling as of M1)
   orchestrator.py         # M0 hardcoded routing -- kept as a deterministic
                           # safety net even after M5's LangGraph router ships
+  observability.py         # M1: OTel tracing, Langfuse if configured else local
+  paths.py                  # shared local-artifact paths (var/)
   guardrails.py           # M3: the enforced escalation gate (stub for now)
-  specialists/            # literature, vision, safety -- M0 stub prompts
-  mcp_server/              # tool schemas + MCP server (M1 implements the bodies)
+  specialists/            # literature, vision, safety -- M1 prompts + tool subsets
+  mcp_server/              # M1: real tool implementations + MCP server
 docs/
   architecture.md          # critical assessment + design rationale
   system_prompts.md        # target full prompts (router, gate, vision)

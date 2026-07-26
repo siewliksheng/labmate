@@ -12,8 +12,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --all-extras
-      - name: unit tests
-        run: uv run pytest tests/ -v
+      - name: unit tests (no network)
+        run: uv run pytest tests/ -v -m "not network"
+      - name: integration tests (live PubMed/Europe PMC/PubChem)
+        run: uv run pytest tests/ -v -m network
+        continue-on-error: true # third-party API flakiness shouldn't block the build
       # TODO: once the golden set + baseline scores exist, add a step here
       # that runs the eval suite and fails the build on regression against
       # evals/results.md (this is the "fails CI on regression" story from
