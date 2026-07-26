@@ -1,14 +1,14 @@
 """Expose tools.py as a standalone MCP server so these tools are portable
 across Claude Code, Claude Desktop, and this project's own harness.
 
-Run with:  uv run python -m radreport_agent.mcp_server.server
+Run with:  uv run python -m labmate.mcp_server.server
 """
 
 from mcp.server.fastmcp import FastMCP
 
-from radreport_agent.mcp_server.tools import _HANDLERS, TOOL_SCHEMAS
+from labmate.mcp_server.tools import _HANDLERS, TOOL_SCHEMAS
 
-mcp = FastMCP("radreport-agent")
+mcp = FastMCP("labmate")
 
 for schema in TOOL_SCHEMAS:
     name = schema["name"]

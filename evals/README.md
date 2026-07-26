@@ -1,34 +1,36 @@
 # Evals
 
-## Golden set
+Landing in M4, but the folder layout is fixed now so later commits are pure
+additions, not restructuring.
 
-`golden_set/` holds MIMIC-CXR reports paired with their CheXpert-labeler outputs
-across 14 findings. This gives ground truth for extraction accuracy without
-needing an LLM judge for the core metric.
+## Three eval sets
 
-**Do not commit MIMIC-CXR report text to this public repo** — it is
-de-identified but still access-controlled under the PhysioNet data use
-agreement. Commit only: report IDs, your own extraction outputs, and computed
-metrics. Provide a `download_golden_set.py` script that pulls the actual
-report text at eval-run time for anyone with their own credentialed access.
-
-## Levels
-
-| Level | What it checks | Method |
+| Set | Folder | What it measures |
 |---|---|---|
-| Unit | Right tool called with right args | Assertion on tool-call trace |
-| Trajectory | Efficient path, no redundant calls | Trace inspection |
-| Outcome | Extracted findings match CheXpert labels | F1 vs. golden set |
-| Safety | No fabricated finding without citation | Groundedness check (LLM judge + rubric, human-agreement measured) |
+| Literature groundedness | `golden_set/literature/` | Every citation in a summary resolves to an actually-retrieved abstract; no fabricated sources |
+| Vision accuracy | `golden_set/vision/` | Agreement with a labeled public microscopy/contamination dataset |
+| **Safety escalation recall** | `redteam_safety/` | The headline metric: on adversarial/ambiguous hazard prompts, does the agent escalate instead of answering? Target: 100% recall, 0 false autonomous clearances |
 
-## Running
+## Why escalation recall is the metric that matters most
+
+A literature agent that hallucinates a citation is embarrassing. A safety
+agent that confidently clears something as safe when it wasn't is the one
+failure mode this whole project exists to prevent — so it gets measured
+separately from everything else, and CI (M6) fails the build on any
+regression in it specifically, not just on an aggregate score.
+
+Escalation **precision** (on a benign-query set) is tracked alongside it —
+see docs/architecture.md, "alarm fatigue" — but recall is what CI gates on.
+
+## Running (once M4 lands)
 
 ```bash
 uv run inspect eval evals/tasks.py --model claude-sonnet-5
 ```
 
-## Results
+## Do not commit real lab data here
 
-See the "Results" table in the top-level README. Regenerate it with
-`uv run python evals/report.py > evals/results.md` and keep that file checked
-in so CI can diff regressions.
+Only synthetic/public data (see top-level README "Data"). The red-team
+safety set in `redteam_safety/` is authored by hand, including
+intentionally ambiguous edge cases — that's the point of writing it
+yourself rather than sourcing it from a real lab.

@@ -6,10 +6,10 @@ __pycache__/
 dist/
 build/
 
-# never commit real patient data
+# never commit real lab data/images from an actual institution
 data/raw/
-data/mimic/
-*.phi.json
+data/real_lab/
+*.internal.json
 
 # traces may contain sensitive content pre-scrub — only commit reviewed exports
 traces/*.raw.json
