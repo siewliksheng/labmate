@@ -17,6 +17,7 @@ Design notes worth keeping as this evolves further:
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -194,11 +195,21 @@ def dispatch_tool(name: str, tool_input: dict[str, Any]) -> dict[str, Any]:
         return result
 
 
+def _ncbi_params(**params):
+    # NCBI allows 3 req/sec unauthenticated, 10 req/sec with a free API
+    # key -- .env.example has a slot for it (NCBI_API_KEY) that previously
+    # went unused. This is the one place that matters.
+    api_key = os.environ.get("NCBI_API_KEY")
+    if api_key:
+        params["api_key"] = api_key
+    return params
+
+
 def _search_pubmed(query: str, max_results: int = 10):
     with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
         search_resp = client.get(
             "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi",
-            params={"db": "pubmed", "term": query, "retmax": max_results, "retmode": "json"},
+            params=_ncbi_params(db="pubmed", term=query, retmax=max_results, retmode="json"),
         )
         search_resp.raise_for_status()
         ids = search_resp.json()["esearchresult"]["idlist"]
@@ -207,7 +218,7 @@ def _search_pubmed(query: str, max_results: int = 10):
 
         summary_resp = client.get(
             "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi",
-            params={"db": "pubmed", "id": ",".join(ids), "retmode": "json"},
+            params=_ncbi_params(db="pubmed", id=",".join(ids), retmode="json"),
         )
         summary_resp.raise_for_status()
         summary = summary_resp.json()["result"]
@@ -229,7 +240,7 @@ def _fetch_abstract(pmid: str):
     with httpx.Client(timeout=_HTTP_TIMEOUT) as client:
         resp = client.get(
             "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi",
-            params={"db": "pubmed", "id": pmid, "rettype": "abstract", "retmode": "text"},
+            params=_ncbi_params(db="pubmed", id=pmid, rettype="abstract", retmode="text"),
         )
         resp.raise_for_status()
 

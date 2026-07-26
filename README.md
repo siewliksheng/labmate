@@ -43,27 +43,31 @@ artifact, not just the final state. Full detail and current status in
 | M5 | LangGraph orchestrator | Orchestration |
 | M6 | Formalize the harness | Harness (capstone) |
 
-**Current status: M2 complete.** Literature search (PubMed + preprints),
-GHS safety-data lookup, biosafety-level lookup, the SOP handbook, and
-environmental-state tracking are all live today, no framework and no API
-key needed:
+**Current status: M3 complete.** The gate itself can be proven with zero
+LLM calls — a real, unresolved PubChem lookup is enough to force an
+escalation regardless of what a draft response said:
 
 ```bash
 uv sync
 PYTHONPATH=src python -c "
 from labmate.mcp_server.tools import dispatch_tool
-print(dispatch_tool('lookup_sds', {'substance': 'formaldehyde'}))
-print(dispatch_tool('search_pubmed', {'query': 'lipid nanoparticle CRISPR delivery', 'max_results': 3}))
-print(dispatch_tool('search_sop_handbook', {'query': 'formaldehyde disposal'}))
-dispatch_tool('log_environmental_state', {'bench': 'bench-2', 'description': 'active Bunsen burner', 'logged_by': 'alex'})
-print(dispatch_tool('get_environmental_state', {'bench': 'bench-2'}))
+from labmate.guardrails import enforce_safety_gate
+
+result = dispatch_tool('lookup_sds', {'substance': 'a completely novel synthetic reagent xyz123'})
+tool_call_log = [{'name': 'lookup_sds', 'input': {'substance': 'xyz123'}, 'result': result}]
+
+gate_result = enforce_safety_gate(
+    'safety', 'is xyz123 safe to pour down the drain?', tool_call_log,
+    'Yes, that should be fine to dispose of normally.',
+)
+print(gate_result)  # verdict: escalate -- the code overrode the (simulated) bad draft
 "
 ```
 
-Every call above writes a traced span to `var/spans.jsonl` and, where
-relevant, a row to `var/labmate_memory.db` — no Langfuse account or
-Postgres instance required to see tracing and memory working (see
-`src/labmate/observability.py` and `src/labmate/memory/store.py`).
+Every call above writes a traced span to `var/spans.jsonl`, a row to
+`var/labmate_memory.db`, and — for the gate demo — a real entry to
+`var/escalations.jsonl`. No Langfuse account, Postgres instance, or LLM
+backend of any kind required.
 
 ## Architecture
 
@@ -129,16 +133,28 @@ Claude Sonnet 5 (vision + reasoning) + Haiku 4.5 (routing) · MCP (FastMCP)
 · LangGraph (M5) · Langfuse + OpenTelemetry · Postgres + pgvector · Inspect
 AI (M4) · a small review-queue UI (M4)
 
+**Model backend is pluggable** (`src/labmate/llm_client.py`) — Claude by
+default, or a local **Ollama** model at zero cost via
+`LLM_BACKEND=ollama` in `.env` (see `.env.example`). Honest tradeoff: real
+for exercising the tool-calling loop and the gate's mechanics during
+development; Claude remains the documented target for actual
+safety-reasoning quality. Vision (`analyze_image`) is Claude-only for now
+— Ollama's vision models exist but translating the image format wasn't
+worth doing for models that would be markedly weaker at hazard-scan
+reasoning anyway.
+
 ## Running it
 
-Tool calls that only need public APIs (`search_pubmed`, `fetch_abstract`,
-`search_biorxiv`, `lookup_sds`, `lookup_biosafety_level`) work with **no
-API key**, as shown above. The full conversational loop and
-`analyze_image` need an Anthropic key:
+Tool calls that only need public APIs or local data (`search_pubmed`,
+`fetch_abstract`, `search_biorxiv`, `lookup_sds`, `lookup_biosafety_level`,
+`search_sop_handbook`, `log_environmental_state`/`get_environmental_state`,
+and the gate itself via `enforce_safety_gate`) work with **no API key at
+all**, as shown above. The full conversational loop needs either an
+Anthropic key or a running local Ollama instance:
 
 ```bash
 uv sync
-cp .env.example .env  # add ANTHROPIC_API_KEY
+cp .env.example .env  # add ANTHROPIC_API_KEY, or set LLM_BACKEND=ollama
 uv run python -m labmate.agent "what's the latest research on lipid nanoparticle delivery?"
 uv run python -m labmate.agent "is this reagent dangerous if I spill it?"
 uv run python -m labmate.agent "what is this?" --image path/to/sample.jpg
@@ -146,19 +162,20 @@ uv run python -m labmate.agent "what is this?" --image path/to/sample.jpg
 
 There is no visual UI yet — that's M4's review-queue app. Until then,
 "previewing" this project means running the CLI/tool calls above, or
-reading `var/spans.jsonl` and `var/escalations.jsonl` after a run to see
-what actually happened.
+reading `var/spans.jsonl`, `var/labmate_memory.db`, and
+`var/escalations.jsonl` after a run to see what actually happened.
 
 ## Project layout
 
 ```
 src/labmate/
-  agent.py               # the active agent loop -- real tools (M1) + auto memory writes (M2)
+  agent.py               # the active agent loop -- tools (M1), memory (M2), the gate (M3)
   orchestrator.py         # M0 hardcoded routing -- kept as a deterministic
                           # safety net even after M5's LangGraph router ships
+  llm_client.py            # M3: pluggable model backend (Anthropic or local Ollama)
   observability.py         # M1: OTel tracing, Langfuse if configured else local
   paths.py                  # shared local-artifact paths (var/)
-  guardrails.py           # M3: the enforced escalation gate (stub for now)
+  guardrails.py           # M3: the enforced escalation gate -- real, not a stub
   specialists/            # literature, vision, safety -- prompts + tool subsets
   mcp_server/              # tool schemas/implementations + MCP server
   memory/                  # M2: SQLite store (Q&A, image analyses, environmental

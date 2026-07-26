@@ -31,10 +31,28 @@ portfolio artifact — not just whatever the code looks like at the end.
       The SOP handbook (`memory/data/sop_handbook/*.md`) is hand-authored
       and directly grounds 3 of the 5 red-team scenarios. Covered by
       `tests/test_memory.py` (11 tests, no network required).
-- [ ] **M3 — The safety gate** _(guardrails, permissions)_
-      Groundedness checks on every specialist's output; a code-enforced
-      escalation threshold (not a prompt instruction); permission tiers
-      `read` / `propose` / `escalate` — no tool exists for "declare safe".
+- [x] **M3 — The safety gate** _(guardrails, permissions)_
+      `enforce_safety_gate` wraps every specialist's draft response —
+      literature and vision included, not just the safety specialist.
+      Two independent checks, either flags escalation: (1) deterministic —
+      any tool result this turn came back `found: false` and wasn't
+      followed by an actual escalation (fires with **zero LLM calls**,
+      proven live against a real unresolved PubChem lookup), or a hazard
+      keyword in the draft text; (2) an LLM groundedness check that fails
+      **closed** to escalate on any error (no backend configured, parse
+      failure, network error). No specialist other than `safety` even
+      *has* the `escalate_to_safety_officer` tool in its own schema — only
+      the gate itself can invoke it on a specialist's behalf, which is the
+      real (if informal) permission boundary at this milestone; a formal
+      declarative policy engine is M6's job, not claimed here.
+      Also added `labmate/llm_client.py` — a pluggable backend
+      (`LLM_BACKEND=anthropic|ollama`) so the gate's LLM call, and the
+      whole tool-calling loop, can run against a local Ollama model for
+      $0 during development. Honest tradeoff documented in its module
+      docstring: real for exercising harness mechanics, weaker for actual
+      safety-reasoning quality. Covered by `tests/test_guardrails.py`
+      (8 tests, no network or API key required — the LLM check is
+      monkeypatched, proving the deterministic layer stands on its own).
 - [ ] **M4 — Eval suite + review queue** _(evals, HITL)_
       Literature groundedness, vision accuracy vs. a labeled dataset, and
       the headline metric: safety-escalation recall on red-team cases
@@ -55,4 +73,4 @@ portfolio artifact — not just whatever the code looks like at the end.
       trace replay/fork debugger; wire a CI gate that fails the build if
       escalation recall regresses.
 
-Currently on: **M2 complete → building M3.**
+Currently on: **M3 complete → building M4.**

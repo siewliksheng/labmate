@@ -92,6 +92,28 @@ and never presented as a verdict in its own right. The report documents
 what was asked, what the gate found, and what the human decided; it is a
 record, not a second opinion.
 
+## M3 implementation notes
+
+`src/labmate/guardrails.py` implements point 1 above for real: a
+deterministic check (unresolved lookup, or a hazard keyword in the draft)
+runs first with zero LLM calls, and an LLM groundedness check runs second,
+ORed together for escalation. The LLM call goes through
+`src/labmate/llm_client.py`, a pluggable backend (Claude or a local Ollama
+model) — proven live with a real, unresolved PubChem lookup forcing an
+escalation with no model call involved at all (see README).
+
+Two things kept honest rather than overclaimed:
+- The hazard-keyword list is still small and hardcoded, same spirit as
+  the M0 routing net, just applied to *output* text now instead of input.
+  It can miss a genuinely novel, unnamed hazard that also slips past the
+  LLM check — this is exactly why M5 adds a dedicated cross-specialist
+  reviewer on top, not a claim that this gate alone is complete.
+- "Permission tiers" at this milestone are informal, not a declarative
+  policy engine: literature and vision specialists simply don't have
+  `escalate_to_safety_officer` in their own tool schema, so only `safety`
+  or the gate itself can invoke it. A real policy config (who/what can
+  call what, reviewable as a diff) is M6's job.
+
 ## What is *not* in scope
 
 This system does not attempt to autonomously classify novel hazards it has
