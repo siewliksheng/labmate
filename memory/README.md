@@ -9,7 +9,7 @@ design this project is meant to teach; the actual code lives in
 | Working | this conversation turn | the model's context window |
 | Episodic | this session | per-session scratch state |
 | Semantic | across sessions | SQLite (`var/labmate_memory.db`) — past Q&A, past image analyses + human-confirmed labels |
-| Procedural | learned lab-specific behavior | the hand-authored SOP handbook (`data/sop_handbook/*.md`); HITL-distilled patterns are M4 |
+| Procedural | learned lab-specific behavior | the hand-authored SOP handbook (`data/sop_handbook/*.md`); HITL-distilled patterns are M5 |
 
 ## Design questions this file originally left open — now answered
 
@@ -28,7 +28,7 @@ design this project is meant to teach; the actual code lives in
 - **Conflict resolution.** Not yet handled for image analyses — a sample
   re-imaged later with a different result is just a second row; nothing
   currently reasons about the trend between them. This is a real gap to
-  close, most likely in M4 when human-confirmed labels start attaching to
+  close, most likely in M5 when human-confirmed labels start attaching to
   these records and a trend actually matters for triage.
 - **Decay.** Q&A and image-analysis history never expire — only
   environmental state does, by design, because it represents "is this

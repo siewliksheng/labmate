@@ -36,7 +36,7 @@ def test_image_analysis_round_trip():
 
 def test_image_analysis_search_includes_human_label():
     store.record_image_analysis("sample2.jpg", "yellow-tinted media", "discoloration at edge")
-    # M4 will attach this via the review queue; simulate it here to prove
+    # M5 will attach this via the review queue; simulate it here to prove
     # the search covers the label column too.
     with store._connect() as conn:
         conn.execute("UPDATE image_analyses SET human_label = ? WHERE image_path = ?", ("confirmed contamination", "sample2.jpg"))

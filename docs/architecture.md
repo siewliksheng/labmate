@@ -35,7 +35,7 @@ subjective threshold to a coverage check, which is falsifiable and testable.
 **3. A fast router model can misroute a safety-relevant query away from
 safety entirely** — and a query that never reaches the safety specialist
 never reaches the gate either. Fix: the hardcoded keyword net from M0
-(`orchestrator.py`) is **not retired when the LLM router (M5) ships**. It
+(`orchestrator.py`) is **not retired when the LLM router (M6) ships**. It
 runs in parallel as a deterministic fallback that can force a safety route
 regardless of what the router model decided. A model can be argued with; a
 substring match cannot.
@@ -59,7 +59,7 @@ A sixth issue worth tracking even though it's not a red-team scenario:
 **escalation precision isn't in the stated target.** 100% recall is the
 right priority, but if the false-escalation rate is high, lab members will
 route around the tool out of frustration — a real-world safety failure
-mode (alarm fatigue) that a recall-only metric hides. M4's eval suite
+mode (alarm fatigue) that a recall-only metric hides. M5's eval suite
 reports escalation precision on a benign-query set alongside recall on the
 red-team set, and precision is watched even though recall is what CI gates
 on.
@@ -84,7 +84,7 @@ separate store from the SOP corpus, keyed by bench/location, with:
 - **Expiry reads as "unknown," never "safe"** — the gate cannot treat a
   stale entry as evidence of a currently-safe environment
 
-## PDF incident reports (M5)
+## PDF incident reports (M6)
 
 Generated **only** as a downstream artifact of a human's resolution of an
 escalated case — never generated to accompany an unresolved escalation,
@@ -106,13 +106,41 @@ Two things kept honest rather than overclaimed:
 - The hazard-keyword list is still small and hardcoded, same spirit as
   the M0 routing net, just applied to *output* text now instead of input.
   It can miss a genuinely novel, unnamed hazard that also slips past the
-  LLM check — this is exactly why M5 adds a dedicated cross-specialist
+  LLM check — this is exactly why M6 adds a dedicated cross-specialist
   reviewer on top, not a claim that this gate alone is complete.
 - "Permission tiers" at this milestone are informal, not a declarative
   policy engine: literature and vision specialists simply don't have
   `escalate_to_safety_officer` in their own tool schema, so only `safety`
   or the gate itself can invoke it. A real policy config (who/what can
-  call what, reviewable as a diff) is M6's job.
+  call what, reviewable as a diff) is M7's job.
+
+## M4 implementation notes: Prelab → Lab → Report
+
+The gate's "unresolved ≠ cleared" principle generalizes from a single
+response to a whole phase transition: `sign_off_experiment` (in
+`labmate/memory/store.py`) mechanically refuses to move an experiment
+into Lab status while any prelab checklist item is unresolved, unless a
+human explicitly passes `acknowledge_unresolved=True` — the same
+fail-closed shape as the M3 gate, just gating a workflow stage instead of
+a single message.
+
+**The active-experiment pointer is deliberately a side channel, not a
+parameter.** `qa_history`, `image_analyses`, and escalations all get
+tagged with whichever experiment `labmate.memory.store.get_active_experiment_id()`
+currently returns, rather than requiring every specialist call to thread
+an `experiment_id` through. This keeps `agent.run()`'s signature
+unchanged for ad-hoc questions asked outside of any experiment — the
+tradeoff is that only one experiment can be "active" at a time per local
+`var/` state, which is fine for a single-user CLI and would need
+revisiting for a multi-user server.
+
+**Report generation stays local on purpose.** `generate_report()` writes
+Markdown to `var/reports/`, full stop — it does not send anything
+anywhere. Sending it to Google Docs, email, or elsewhere would introduce
+this project's first tool with a real external side effect, and that
+category of action gets the same treatment this project already applies
+elsewhere: explicit confirmation on every use, not an automatic step
+folded into report generation. See `reports/README.md`.
 
 ## What is *not* in scope
 

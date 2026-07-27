@@ -2,7 +2,7 @@
 
 > A multi-agent lab assistant — literature, sample-image analysis, and safety — built around one non-negotiable rule: **no specialist ever clears a hazard on its own.**
 
-<!-- TODO: replace with a GIF once M4's review-queue UI exists. -->
+<!-- TODO: replace with a GIF once M5's review-queue UI exists. -->
 ![demo placeholder](docs/demo.gif)
 
 [![evals](https://github.com/siewliksheng/labmate/actions/workflows/evals.yml/badge.svg)](../../actions)
@@ -26,7 +26,7 @@ replace a safety officer, an SDS binder, or institutional biosafety review
 — its job is routing the right questions to a human fast enough to matter,
 and never letting one slip through unanswered-but-unescalated.
 
-## Built as one project, seven milestones
+## Built as one project, eight milestones
 
 Each milestone lands one concept from modern agentic AI engineering, on the
 same codebase, in order — so the git history is itself the portfolio
@@ -39,16 +39,37 @@ artifact, not just the final state. Full detail and current status in
 | M1 | Real tools + tracing | Tool design, Observability |
 | M2 | Lab memory + environmental state | Context engineering, Memory |
 | M3 | The Hard Safety Gate | Guardrails, Permissions |
-| M4 | Eval suite + HITL review queue | Evals, Human-in-the-loop |
-| M5 | LangGraph orchestrator | Orchestration |
-| M6 | Formalize the harness | Harness (capstone) |
+| M4 | Experiment sessions: Prelab → Lab → Report | Orchestration, Memory, HITL |
+| M5 | Eval suite + HITL review queue | Evals, Human-in-the-loop |
+| M6 | LangGraph orchestrator | Orchestration |
+| M7 | Formalize the harness | Harness (capstone) |
 
-**Current status: M3 complete.** The gate itself can be proven with zero
-LLM calls — a real, unresolved PubChem lookup is enough to force an
-escalation regardless of what a draft response said:
+**Current status: M4 complete.** Beyond single-turn Q&A, there's now a
+full session workflow: state an experiment, get an automatic Prelab
+safety checklist (real SDS/biosafety/SOP lookups), work through Lab with
+ad-hoc questions and recorded observations, and generate a Report —
+[see a real example](reports/example_report.md), built from genuine
+PubChem/biosafety-table lookups plus one deliberately unresolved item
+that required explicit human sign-off.
 
 ```bash
 uv sync
+PYTHONPATH=src python -m labmate.experiment start "DNA extraction from E. coli K-12 culture, ethanol precipitation, formaldehyde-fixed gel imaging"
+# -> prints an experiment_id + a checklist; any unresolved item blocks lab work
+PYTHONPATH=src python -m labmate.experiment signoff <experiment_id> --by "dr. lin" --acknowledge-unresolved
+PYTHONPATH=src python -m labmate.experiment record <experiment_id> --kind text --content "OD600 = 0.68 at harvest" --note "flask A"
+PYTHONPATH=src python -m labmate.experiment report <experiment_id>
+# -> Markdown report saved to var/reports/<experiment_id>.md
+```
+
+(The `start`/`report` steps need an LLM backend — Anthropic or local
+Ollama, see "Stack" below. `signoff` and `record` don't.)
+
+The gate itself can still be proven with **zero LLM calls** — a real,
+unresolved PubChem lookup is enough to force an escalation regardless of
+what a draft response said:
+
+```bash
 PYTHONPATH=src python -c "
 from labmate.mcp_server.tools import dispatch_tool
 from labmate.guardrails import enforce_safety_gate
@@ -64,10 +85,11 @@ print(gate_result)  # verdict: escalate -- the code overrode the (simulated) bad
 "
 ```
 
-Every call above writes a traced span to `var/spans.jsonl`, a row to
-`var/labmate_memory.db`, and — for the gate demo — a real entry to
-`var/escalations.jsonl`. No Langfuse account, Postgres instance, or LLM
-backend of any kind required.
+Every call above writes a traced span to `var/spans.jsonl`, rows to
+`var/labmate_memory.db`, generated reports to `var/reports/`, and — for
+the gate demo — a real entry to `var/escalations.jsonl`. No Langfuse
+account, Postgres instance, or (for most of this) LLM backend of any kind
+required.
 
 ## Architecture
 
@@ -85,8 +107,20 @@ flowchart TD
     B -.->|every call| K[(OTel spans → Langfuse)]
 ```
 
-Full M5 graph blueprint (LangGraph nodes, the gate's exact logic, why it
-uses `Command(goto=...)` and `interrupt()`): [`docs/m5_orchestration_design.md`](docs/m5_orchestration_design.md).
+Layered on top, the M4 session workflow:
+
+```mermaid
+flowchart LR
+    P[User states\nan experiment] --> Q[Prelab: SDS/biosafety/\nSOP lookups -> checklist]
+    Q -->|any item unresolved| R{Sign-off}
+    R -->|blocked| Q
+    R -->|acknowledged| S[Lab: ad-hoc Q&A\n+ recorded observations]
+    S --> T[Report: single synthesis call\nescalations surfaced first]
+    T --> U[Markdown/HTML,\nlocal only]
+```
+
+Full M6 graph blueprint (LangGraph nodes, the gate's exact logic, why it
+uses `Command(goto=...)` and `interrupt()`): [`docs/m6_orchestration_design.md`](docs/m6_orchestration_design.md).
 Exact system prompts for the router, gate evaluator, and vision agent's
 two-pass design: [`docs/system_prompts.md`](docs/system_prompts.md).
 
@@ -109,7 +143,7 @@ recall, zero false autonomous clearances). See [`evals/redteam_safety/`](evals/r
 
 ## Results
 
-<!-- TODO: fill in once M4's eval suite runs. Numbers, not adjectives. -->
+<!-- TODO: fill in once M5's eval suite runs. Numbers, not adjectives. -->
 
 | Metric | Value |
 |---|---|
@@ -130,8 +164,8 @@ its ambiguous edge cases can be deliberately designed rather than sourced.
 ## Stack
 
 Claude Sonnet 5 (vision + reasoning) + Haiku 4.5 (routing) · MCP (FastMCP)
-· LangGraph (M5) · Langfuse + OpenTelemetry · Postgres + pgvector · Inspect
-AI (M4) · a small review-queue UI (M4)
+· LangGraph (M6) · Langfuse + OpenTelemetry · Postgres + pgvector · Inspect
+AI (M5) · a small review-queue UI (M5)
 
 **Model backend is pluggable** (`src/labmate/llm_client.py`) — Claude by
 default, or a local **Ollama** model at zero cost via
@@ -160,7 +194,7 @@ uv run python -m labmate.agent "is this reagent dangerous if I spill it?"
 uv run python -m labmate.agent "what is this?" --image path/to/sample.jpg
 ```
 
-There is no visual UI yet — that's M4's review-queue app. Until then,
+There is no visual UI yet — that's M5's review-queue app. Until then,
 "previewing" this project means running the CLI/tool calls above, or
 reading `var/spans.jsonl`, `var/labmate_memory.db`, and
 `var/escalations.jsonl` after a run to see what actually happened.
@@ -170,23 +204,27 @@ reading `var/spans.jsonl`, `var/labmate_memory.db`, and
 ```
 src/labmate/
   agent.py               # the active agent loop -- tools (M1), memory (M2), the gate (M3)
+  experiment.py            # M4: Prelab -> Lab -> Report workflow + CLI
   orchestrator.py         # M0 hardcoded routing -- kept as a deterministic
-                          # safety net even after M5's LangGraph router ships
+                          # safety net even after M6's LangGraph router ships
   llm_client.py            # M3: pluggable model backend (Anthropic or local Ollama)
   observability.py         # M1: OTel tracing, Langfuse if configured else local
   paths.py                  # shared local-artifact paths (var/)
+  json_utils.py              # shared LLM-JSON-response parsing helper
   guardrails.py           # M3: the enforced escalation gate -- real, not a stub
   specialists/            # literature, vision, safety -- prompts + tool subsets
   mcp_server/              # tool schemas/implementations + MCP server
   memory/                  # M2: SQLite store (Q&A, image analyses, environmental
-                          # state) + the hand-authored SOP handbook
+                          # state, M4's experiments/lab_observations) + the
+                          # hand-authored SOP handbook
 docs/
   architecture.md          # critical assessment + design rationale
   system_prompts.md        # target full prompts (router, gate, vision)
-  m5_orchestration_design.md  # LangGraph blueprint for M5
+  m6_orchestration_design.md  # LangGraph blueprint for M6
 evals/
   redteam_safety/           # the 5 adversarial safety scenarios
-  golden_set/                # literature + vision ground truth (M4)
+  golden_set/                # literature + vision ground truth (M5)
 memory/                      # lab memory design notes (implementation: src/labmate/memory/)
+reports/                      # M4: curated example report (real ones are var/reports/, gitignored)
 traces/                       # exported example runs (M1+)
 ```

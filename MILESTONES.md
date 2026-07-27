@@ -44,7 +44,7 @@ portfolio artifact — not just whatever the code looks like at the end.
       *has* the `escalate_to_safety_officer` tool in its own schema — only
       the gate itself can invoke it on a specialist's behalf, which is the
       real (if informal) permission boundary at this milestone; a formal
-      declarative policy engine is M6's job, not claimed here.
+      declarative policy engine is M7's job, not claimed here.
       Also added `labmate/llm_client.py` — a pluggable backend
       (`LLM_BACKEND=anthropic|ollama`) so the gate's LLM call, and the
       whole tool-calling loop, can run against a local Ollama model for
@@ -53,12 +53,37 @@ portfolio artifact — not just whatever the code looks like at the end.
       safety-reasoning quality. Covered by `tests/test_guardrails.py`
       (8 tests, no network or API key required — the LLM check is
       monkeypatched, proving the deterministic layer stands on its own).
-- [ ] **M4 — Eval suite + review queue** _(evals, HITL)_
+- [x] **M4 — Experiment sessions: Prelab → Lab → Report** _(orchestration, memory, HITL)_
+      A stateful workflow layered on the existing specialists:
+      `start_experiment` states an experiment and immediately runs Prelab
+      (real `lookup_sds`/`lookup_biosafety_level`/`search_sop_handbook`
+      calls), producing a blocking checklist — `sign_off` mechanically
+      refuses to enter Lab while any item is unresolved unless a human
+      explicitly acknowledges it, the same fail-closed shape as the M3
+      gate applied to a phase transition instead of a single response.
+      Lab reuses the existing specialists for ad-hoc questions
+      (auto-tagged to whichever experiment is active via a side-channel
+      pointer, not a threaded parameter) plus a new `record_observation`
+      for explicit text/image value logging, distinct from the general
+      vision auto-log. `generate_report` is a single synthesis call over
+      everything accumulated — escalations surfaced first, next-step
+      guidance framed as a suggestion — saved locally as Markdown
+      (`var/reports/`, never committed). Deliberately does **not** send
+      the report anywhere external (see `reports/README.md` — Google
+      Docs needs the user's own OAuth setup and any external send should
+      require explicit per-run confirmation, matching how this project
+      treats every other side-effecting action). One curated example,
+      built from genuine PubChem/biosafety-table lookups with one real
+      unresolved item, is committed at `reports/example_report.md` and
+      was also rendered live as an HTML Artifact. Covered by
+      `tests/test_experiment.py` (6 tests, no network or API key
+      required — the LLM synthesis calls are monkeypatched).
+- [ ] **M5 — Eval suite + review queue** _(evals, HITL)_
       Literature groundedness, vision accuracy vs. a labeled dataset, and
       the headline metric: safety-escalation recall on red-team cases
       (target: 100%, zero false autonomous clearances). Human review queue
       feeds resolved cases back into memory + the eval set.
-- [ ] **M5 — Real orchestrator** _(orchestration)_
+- [ ] **M6 — Real orchestrator** _(orchestration)_
       Rebuild the orchestrator in LangGraph; parallel fan-out for mixed
       questions; the Hard Safety Gate becomes a dedicated graph node that
       every specialist's output must pass through (not just the safety
@@ -68,9 +93,9 @@ portfolio artifact — not just whatever the code looks like at the end.
       is **kept**, not deleted — it runs in parallel with the LLM router as
       a deterministic fallback (see docs/architecture.md, "why the router
       needs a net a model can't reason around").
-- [ ] **M6 — Formalize the harness** _(harness, capstone)_
+- [ ] **M7 — Formalize the harness** _(harness, capstone)_
       Extract M3's ad hoc rules into a declarative policy config; add a
       trace replay/fork debugger; wire a CI gate that fails the build if
       escalation recall regresses.
 
-Currently on: **M3 complete → building M4.**
+Currently on: **M4 complete → building M5.**

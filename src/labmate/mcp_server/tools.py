@@ -12,7 +12,7 @@ Design notes worth keeping as this evolves further:
   found to memory (M2) so a future analysis of a similar sample can be
   compared against labeled history, not just judged in isolation.
 - escalate_to_safety_officer logs to a local file for now (var/, never
-  committed); M4 replaces the storage layer with a real review-queue DB
+  committed); M5 replaces the storage layer with a real review-queue DB
   and builds a UI on top, but the tool's interface doesn't need to change.
 """
 
@@ -24,6 +24,7 @@ from typing import Any
 import httpx
 
 from labmate.memory.sop_handbook import search_sop_handbook as _search_sop_handbook
+from labmate.memory.store import get_active_experiment_id as _get_active_experiment_id
 from labmate.memory.store import get_environmental_state as _get_environmental_state
 from labmate.memory.store import log_environmental_state as _log_environmental_state
 from labmate.memory.store import record_image_analysis
@@ -330,7 +331,9 @@ def _analyze_image(image_path: str):
 
     description = _pass(VISION_DESCRIPTIVE_PROMPT)
     hazard_scan_findings = _pass(VISION_HAZARD_SCAN_PROMPT)
-    record_image_analysis(image_path, description, hazard_scan_findings)
+    record_image_analysis(
+        image_path, description, hazard_scan_findings, experiment_id=_get_active_experiment_id()
+    )
 
     return {
         "found": True,
@@ -429,6 +432,7 @@ def _escalate_to_safety_officer(summary: str, urgency: str):
         "summary": summary,
         "urgency": urgency,
         "status": "pending",
+        "experiment_id": _get_active_experiment_id(),
     }
     with (VAR_DIR / "escalations.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
@@ -436,7 +440,7 @@ def _escalate_to_safety_officer(summary: str, urgency: str):
     return {
         "escalated": True,
         "queued_at": entry["timestamp"],
-        "note": "Logged to the local review queue (var/escalations.jsonl). M4 builds the real review UI on top of this store.",
+        "note": "Logged to the local review queue (var/escalations.jsonl). M5 builds the real review UI on top of this store.",
     }
 
 

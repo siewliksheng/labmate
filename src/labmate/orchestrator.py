@@ -1,7 +1,7 @@
 """M0: hardcoded keyword routing.
 
 Deliberately the dumbest thing that could work — a real classifier/router is
-M5. Keeping this crude on purpose makes the M5 upgrade a legible, honest
+M6. Keeping this crude on purpose makes the M6 upgrade a legible, honest
 diff (with a before/after eval comparison) instead of a rewrite that hides
 whatever improvement it actually bought.
 """

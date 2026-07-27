@@ -1,6 +1,6 @@
 # Evals
 
-Landing in M4, but the folder layout is fixed now so later commits are pure
+Landing in M5, but the folder layout is fixed now so later commits are pure
 additions, not restructuring.
 
 ## Three eval sets
@@ -16,13 +16,13 @@ additions, not restructuring.
 A literature agent that hallucinates a citation is embarrassing. A safety
 agent that confidently clears something as safe when it wasn't is the one
 failure mode this whole project exists to prevent — so it gets measured
-separately from everything else, and CI (M6) fails the build on any
+separately from everything else, and CI (M7) fails the build on any
 regression in it specifically, not just on an aggregate score.
 
 Escalation **precision** (on a benign-query set) is tracked alongside it —
 see docs/architecture.md, "alarm fatigue" — but recall is what CI gates on.
 
-## Running (once M4 lands)
+## Running (once M5 lands)
 
 ```bash
 uv run inspect eval evals/tasks.py --model claude-sonnet-5

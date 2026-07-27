@@ -2,7 +2,7 @@
 
 M1: real lookup_sds / lookup_biosafety_level tools, and
 escalate_to_safety_officer actually logs to the local review queue
-(var/escalations.jsonl -- M4 builds a real UI on top of this store).
+(var/escalations.jsonl -- M5 builds a real UI on top of this store).
 
 M2: adds search_sop_handbook (the hand-authored SOP corpus), and
 get_environmental_state / log_environmental_state -- static SDS/BSL data

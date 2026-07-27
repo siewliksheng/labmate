@@ -1,10 +1,11 @@
-"""M1/M2/M3: the agent loop -- real tool calling, automatic memory writes,
-and every draft response passing through the Hard Safety Gate.
+"""M1/M2/M3/M4: the agent loop -- real tool calling, automatic memory
+writes, every draft response passing through the Hard Safety Gate, and
+(M4) auto-tagging with whichever experiment session is currently active.
 
 One tool-calling loop shared by every specialist -- what differs per
 specialist is its system prompt and which tool subset it's given (see
 specialists/*.py). Routing is still the M0 hardcoded keyword net
-(orchestrator.py); a real LLM router replaces it in M5, alongside the M0
+(orchestrator.py); a real LLM router replaces it in M6, alongside the M0
 net, not instead of it.
 
 The model call itself goes through labmate.llm_client, which is pluggable
@@ -13,7 +14,11 @@ without any change to this loop's code.
 
 Every completed exchange is recorded to memory unconditionally, AFTER the
 gate has run -- memory reflects what the user actually saw, never a
-pre-gate draft that got escalated instead of released.
+pre-gate draft that got escalated instead of released. If an experiment is
+active (labmate.experiment.start_experiment set it), the Q&A row is
+tagged with its id automatically, so a later Report can pull ad-hoc Lab
+questions back without the user threading an experiment_id through every
+CLI call.
 """
 
 import argparse
@@ -21,7 +26,7 @@ import json
 
 from labmate.guardrails import enforce_safety_gate
 from labmate.llm_client import create_message
-from labmate.memory.store import record_qa
+from labmate.memory.store import get_active_experiment_id, record_qa
 from labmate.mcp_server.tools import dispatch_tool
 from labmate.orchestrator import route
 from labmate.specialists import literature, safety, vision
@@ -55,7 +60,12 @@ def run(user_input: str, image_path: str | None = None) -> str:
         if response.stop_reason != "tool_use":
             draft_text = "".join(block.text for block in response.content if block.type == "text")
             gate_result = enforce_safety_gate(specialist_name, user_input, tool_call_log, draft_text)
-            record_qa(specialist_name, user_input, gate_result["response_text"])
+            record_qa(
+                specialist_name,
+                user_input,
+                gate_result["response_text"],
+                experiment_id=get_active_experiment_id(),
+            )
             return f"[routed to: {specialist_name}]\n{gate_result['response_text']}"
 
         tool_results = []

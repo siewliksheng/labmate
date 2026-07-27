@@ -25,13 +25,14 @@ both must clear for a response to pass:
 Known limitation, not hidden: the deterministic hazard-keyword check is a
 small hardcoded list (see _HAZARD_KEYWORDS below), not a hazard-entity
 lookup -- it can miss a genuinely novel, unnamed hazard that the LLM
-groundedness check also doesn't happen to flag. This is exactly why M5
+groundedness check also doesn't happen to flag. This is exactly why M6
 adds a dedicated cross-specialist reviewer on top of what's here, not a
 claim that this gate is already complete.
 """
 
 import json
 
+from labmate.json_utils import extract_json_object
 from labmate.llm_client import create_message
 from labmate.mcp_server.tools import dispatch_tool
 
@@ -115,8 +116,7 @@ def llm_groundedness_check(user_input: str, specialist_name: str, tool_call_log:
 
 def _parse_verdict(text: str) -> dict:
     try:
-        start, end = text.index("{"), text.rindex("}") + 1
-        parsed = json.loads(text[start:end])
+        parsed = extract_json_object(text)
         if parsed.get("verdict") not in {"clear", "escalate"}:
             raise ValueError(f"unexpected verdict value: {parsed.get('verdict')!r}")
         return parsed

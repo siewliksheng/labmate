@@ -1,6 +1,6 @@
-# M5 orchestration design: the Hard Safety Gate as a graph node
+# M6 orchestration design: the Hard Safety Gate as a graph node
 
-This is the target blueprint for M5 — not runnable today. It depends on
+This is the target blueprint for M6 — not runnable today. It depends on
 `llm_router`, `keyword_net`, and the guardrail check functions that M1/M3
 implement, and `langgraph` is currently an optional extra
 (`pip install labmate[orchestration]`) rather than a core dependency until
@@ -56,7 +56,7 @@ def router_node(state: LabMateState) -> dict:
     missed. See docs/architecture.md, gap #3.
     """
     from labmate import orchestrator as keyword_net
-    from labmate.mcp_server import llm_router  # M5: the Haiku classification call
+    from labmate.mcp_server import llm_router  # M6: the Haiku classification call
 
     llm_routes = set(llm_router.classify(state["user_input"]))
     forced = {keyword_net.route(state["user_input"], has_image=bool(state.get("image_path")))}
@@ -104,10 +104,10 @@ def safety_gate_node(state: LabMateState) -> Command[Literal["respond", "escalat
 
 
 def escalate_node(state: LabMateState) -> dict:
-    """Pauses the graph and surfaces the case to the M4 HITL review queue.
+    """Pauses the graph and surfaces the case to the M5 HITL review queue.
     A human resolves it out-of-band; the queue UI resumes this run with
     Command(resume={"human_response": ...}). The PDF incident report
-    (M5) is generated from the resolved state, never before resolution.
+    (M6) is generated from the resolved state, never before resolution.
     """
     decision = interrupt(
         {
@@ -164,8 +164,8 @@ decision becomes necessary, not one hop later.
 - Retry/timeout handling on the specialist calls
 - The actual `deterministic_hazard_check` / `llm_groundedness_check`
   implementations (M3)
-- The PDF report generator (M5, downstream of a resolved `interrupt`)
-- Auth on the HITL resume endpoint (M4's review-queue UI)
+- The PDF report generator (M6, downstream of a resolved `interrupt`)
+- Auth on the HITL resume endpoint (M5's review-queue UI)
 
 Leaving these out here isn't an oversight — they're each their own
 milestone deliverable, and inlining a fake version now would hide exactly

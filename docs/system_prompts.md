@@ -1,6 +1,6 @@
-# System prompts (M5 target state)
+# System prompts (M6 target state)
 
-These are the full prompts the M5 LangGraph rebuild uses. They are *not*
+These are the full prompts the M6 LangGraph rebuild uses. They are *not*
 what's running in M0 — `src/labmate/specialists/*.py` currently hold
 deliberately minimal stub prompts that decline to answer (see MILESTONES.md).
 These are the target versions each specialist grows into over M1–M3, kept
