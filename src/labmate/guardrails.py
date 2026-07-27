@@ -157,7 +157,17 @@ def _already_escalated(tool_call_log: list[dict]) -> bool:
 
 
 def _unresolved_lookups(tool_call_log: list[dict]) -> list[dict]:
-    return [call for call in tool_call_log if isinstance(call["result"], dict) and call["result"].get("found") is False]
+    # Found live against Ollama/llama3.1: a tool call with a malformed
+    # argument (wrong parameter name) errors out inside dispatch_tool,
+    # returning {"error": ...} -- no "found" key at all, so this used to
+    # slip past the deterministic check entirely and rely on the LLM
+    # layer noticing on its own. A tool call that failed to run is exactly
+    # as unresolved as one that returned found: false; treat it the same.
+    return [
+        call
+        for call in tool_call_log
+        if isinstance(call["result"], dict) and (call["result"].get("found") is False or "error" in call["result"])
+    ]
 
 
 # Deliberately generous phrases for "the hazard-scan pass found nothing" --

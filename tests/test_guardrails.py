@@ -34,6 +34,30 @@ def test_unresolved_lookup_forces_escalation_without_calling_llm(monkeypatch):
     assert calls and calls[0][0] == "escalate_to_safety_officer"
 
 
+def test_tool_call_error_forces_escalation_without_calling_llm(monkeypatch):
+    """Found live against Ollama/llama3.1: a malformed tool argument
+    errors out inside dispatch_tool ({"error": ...}, no "found" key at
+    all) -- that used to slip past this deterministic check entirely.
+    """
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("llm_groundedness_check should not be called when a tool call errored")
+
+    monkeypatch.setattr(guardrails, "llm_groundedness_check", _boom)
+    monkeypatch.setattr(guardrails, "dispatch_tool", lambda name, tool_input: {"escalated": True, "queued_at": "now"})
+
+    tool_call_log = [
+        {
+            "name": "lookup_biosafety_level",
+            "input": {"substance": "formaldehyde"},
+            "result": {"error": "_lookup_biosafety_level() got an unexpected keyword argument 'substance'"},
+        }
+    ]
+    result = guardrails.enforce_safety_gate("safety", "is formaldehyde dangerous?", tool_call_log, "Should be fine.")
+
+    assert result["verdict"] == "escalate"
+
+
 def test_no_hazard_signal_and_llm_clears_passes_through(monkeypatch):
     monkeypatch.setattr(guardrails, "llm_groundedness_check", lambda *a, **kw: {"verdict": "clear", "reasoning": "grounded"})
 
