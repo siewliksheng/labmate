@@ -179,6 +179,23 @@ portfolio artifact — not just whatever the code looks like at the end.
         access removes the main observed distraction. Confirmed live:
         real PubChem/biosafety data, one genuinely unresolved item
         (EDTA), correctly blocking sign-off until acknowledged.
+
+      **A fourth gap, found by the user reproducing it independently**:
+      given a blank/whitespace description, the model didn't say "I have
+      nothing to check" — it fabricated a plausible-sounding but entirely
+      fictional experiment (confirmed twice, with *different* invented
+      content each time, proving genuine hallucination-from-nothing, not
+      something cached). `start_experiment` now rejects a blank
+      description outright, in `labmate/experiment.py` so every
+      interface (web, terminal, scriptable CLI) benefits — a checklist
+      grounded in a fictional experiment is worse than no checklist.
+      Separately, added `autocomplete="off"` to every form field across
+      `web.py`'s templates as a defensive measure against browser
+      autofill silently substituting a previously-seen value — the
+      specific repeated hallucinated text observed (word-for-word
+      identical across two independent browser sessions) pointed at
+      autofill rather than the model, though this couldn't be fully
+      confirmed without inspecting the browser directly.
 - [ ] **M6 — Real orchestrator** _(orchestration)_
       Rebuild the orchestrator in LangGraph; parallel fan-out for mixed
       questions; the Hard Safety Gate becomes a dedicated graph node that

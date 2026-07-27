@@ -35,10 +35,10 @@
   <div class="callout">{{ unresolved_count }} item(s) are unresolved and must be acknowledged before Lab work starts.</div>
   {% endif %}
   <div class="card">
-    <form method="post" action="/experiments/{{ experiment.id }}/signoff">
+    <form method="post" action="/experiments/{{ experiment.id }}/signoff" autocomplete="off">
       <div class="field">
         <label>Your name (for sign-off)</label>
-        <input type="text" name="signed_off_by" required>
+        <input type="text" name="signed_off_by" autocomplete="off" required>
       </div>
       {% if unresolved_count > 0 %}
       <div class="field">

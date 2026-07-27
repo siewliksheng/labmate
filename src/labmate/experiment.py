@@ -110,7 +110,21 @@ def start_experiment(description: str) -> dict:
     """Creates the experiment, sets it as active, and runs Prelab
     immediately -- matching the described flow where stating the
     experiment IS what triggers prelab prep, not a separate step.
+
+    Rejects a blank/whitespace-only description outright rather than
+    passing it to the model. Confirmed live: given nothing to work with,
+    the model doesn't say so -- it invents a plausible-sounding but
+    entirely fabricated experiment (observed twice, with different
+    fabricated content each time, proving it's genuine hallucination from
+    nothing rather than something cached). A checklist grounded in a
+    fictional experiment is worse than no checklist at all.
     """
+    if not description or not description.strip():
+        raise ValueError(
+            "Experiment description cannot be empty -- an empty description can't be "
+            "safety-checked, and the model will invent one rather than say so."
+        )
+
     experiment_id = store.create_experiment(description)
     checklist = run_prelab(experiment_id, description)
     return {"experiment_id": experiment_id, "checklist": checklist}

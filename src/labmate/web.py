@@ -49,9 +49,12 @@ def new_experiment_form(request: Request):
     return templates.TemplateResponse(request, "experiment_new.html", {})
 
 
-@app.post("/experiments/new")
-def create_experiment(description: str = Form(...)):
-    result = experiment.start_experiment(description)
+@app.post("/experiments/new", response_class=HTMLResponse)
+def create_experiment(request: Request, description: str = Form(...)):
+    try:
+        result = experiment.start_experiment(description)
+    except ValueError as exc:
+        return templates.TemplateResponse(request, "experiment_new.html", {"error": str(exc)}, status_code=400)
     return RedirectResponse(f"/experiments/{result['experiment_id']}/prelab", status_code=303)
 
 

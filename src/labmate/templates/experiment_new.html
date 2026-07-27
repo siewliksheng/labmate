@@ -4,11 +4,15 @@
 <h1>New experiment</h1>
 <p class="muted">Describing the experiment runs Prelab immediately — real SDS/biosafety/SOP lookups, not a canned checklist.</p>
 
+{% if error %}
+<div class="callout">{{ error }}</div>
+{% endif %}
+
 <div class="card">
-  <form method="post" action="/experiments/new">
+  <form method="post" action="/experiments/new" autocomplete="off">
     <div class="field">
       <label>What experiment do you want to run?</label>
-      <textarea name="description" rows="3" required placeholder="e.g. DNA extraction from E. coli K-12 culture, ethanol precipitation, formaldehyde-fixed gel imaging"></textarea>
+      <textarea name="description" rows="3" required autocomplete="off" placeholder="e.g. DNA extraction from E. coli K-12 culture, ethanol precipitation, formaldehyde-fixed gel imaging"></textarea>
     </div>
     <button class="btn" type="submit">Run Prelab safety check</button>
   </form>

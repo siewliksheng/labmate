@@ -6,9 +6,9 @@
 
 <div class="card">
   <h3>Ask a question</h3>
-  <form method="post" action="/experiments/{{ experiment.id }}/lab/ask">
+  <form method="post" action="/experiments/{{ experiment.id }}/lab/ask" autocomplete="off">
     <div class="field">
-      <textarea name="question" rows="2" required placeholder="e.g. what's the annealing temperature for this primer set?"></textarea>
+      <textarea name="question" rows="2" required autocomplete="off" placeholder="e.g. what's the annealing temperature for this primer set?"></textarea>
     </div>
     <button class="btn" type="submit">Ask</button>
   </form>
@@ -16,20 +16,20 @@
 
 <div class="card">
   <h3>Record a text observation</h3>
-  <form method="post" action="/experiments/{{ experiment.id }}/lab/record">
+  <form method="post" action="/experiments/{{ experiment.id }}/lab/record" autocomplete="off">
     <input type="hidden" name="kind" value="text">
-    <div class="field"><input type="text" name="content" placeholder="What did you observe?" required></div>
-    <div class="field"><input type="text" name="note" placeholder="Note (optional)"></div>
+    <div class="field"><input type="text" name="content" placeholder="What did you observe?" autocomplete="off" required></div>
+    <div class="field"><input type="text" name="note" placeholder="Note (optional)" autocomplete="off"></div>
     <button class="btn secondary" type="submit">Record</button>
   </form>
 </div>
 
 <div class="card">
   <h3>Record an image observation</h3>
-  <form method="post" action="/experiments/{{ experiment.id }}/lab/record">
+  <form method="post" action="/experiments/{{ experiment.id }}/lab/record" autocomplete="off">
     <input type="hidden" name="kind" value="image">
-    <div class="field"><input type="text" name="content" placeholder="Path to the image" required></div>
-    <div class="field"><input type="text" name="note" placeholder="Note (optional)"></div>
+    <div class="field"><input type="text" name="content" placeholder="Path to the image" autocomplete="off" required></div>
+    <div class="field"><input type="text" name="note" placeholder="Note (optional)" autocomplete="off"></div>
     <button class="btn secondary" type="submit">Record</button>
   </form>
 </div>

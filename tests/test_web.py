@@ -37,6 +37,19 @@ def test_home_page_loads(client):
     assert "Start a new experiment" in response.text
 
 
+def test_create_experiment_rejects_blank_description_without_calling_llm(client, monkeypatch):
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("create_message should never be called for a blank description")
+
+    monkeypatch.setattr(experiment, "create_message", _boom)
+
+    response = client.post("/experiments/new", data={"description": "   "})
+
+    assert response.status_code == 400
+    assert "cannot be empty" in response.text
+    assert store.list_experiments() == []
+
+
 def test_create_experiment_redirects_to_prelab(client, monkeypatch):
     checklist = {"required_ppe": [], "items": [], "unresolved_count": 0}
     monkeypatch.setattr(experiment, "create_message", _fake_llm(json.dumps(checklist)))

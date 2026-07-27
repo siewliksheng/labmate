@@ -74,7 +74,8 @@ def main() -> None:
 
 def run_experiment_flow() -> None:
     description = ask_text("What experiment do you want to run?")
-    if not description:
+    if not description or not description.strip():
+        say("No description given, stopping.", style="fg:ansiyellow")
         return
 
     say("\nRunning prelab safety checks (real SDS/biosafety/SOP lookups)...\n")

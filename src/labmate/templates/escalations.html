@@ -11,7 +11,7 @@
 <div class="card">
   <p class="muted">{{ entry.timestamp }} · {{ entry.urgency }}{% if entry.experiment_id %} · experiment {{ entry.experiment_id }}{% endif %}</p>
   <p>{{ entry.summary }}</p>
-  <form method="post" action="/escalations/{{ loop.index }}/resolve">
+  <form method="post" action="/escalations/{{ loop.index }}/resolve" autocomplete="off">
     <div class="field">
       <label>Decision</label>
       <select name="decision">
@@ -19,8 +19,8 @@
         <option value="false_positive">False positive</option>
       </select>
     </div>
-    <div class="field"><label>Your name</label><input type="text" name="resolved_by" required></div>
-    <div class="field"><label>Note (optional)</label><input type="text" name="note"></div>
+    <div class="field"><label>Your name</label><input type="text" name="resolved_by" autocomplete="off" required></div>
+    <div class="field"><label>Note (optional)</label><input type="text" name="note" autocomplete="off"></div>
     <button class="btn" type="submit">Resolve</button>
   </form>
 </div>

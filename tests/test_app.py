@@ -43,6 +43,18 @@ def _fake_llm(text: str):
     return _call
 
 
+def test_experiment_flow_stops_on_whitespace_only_description_without_calling_llm(monkeypatch):
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("create_message should never be called for a blank description")
+
+    monkeypatch.setattr(experiment, "create_message", _boom)
+    monkeypatch.setattr(app, "ask_text", _sequence("ask_text", "   "))
+
+    app.run_experiment_flow()
+
+    assert store.list_experiments() == []
+
+
 def test_experiment_flow_completes_and_generates_report_when_no_unresolved_items(monkeypatch):
     checklist = {"required_ppe": [], "items": [], "unresolved_count": 0}
     monkeypatch.setattr(experiment, "create_message", _fake_llm(json.dumps(checklist)))

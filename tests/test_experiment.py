@@ -65,6 +65,22 @@ def test_signoff_blocks_when_unresolved_items_not_acknowledged(monkeypatch):
     assert exp["status"] == "lab"
 
 
+def test_start_experiment_rejects_blank_description_without_calling_llm(monkeypatch):
+    """Confirmed live (twice, with different fabricated content each
+    time): given a blank/whitespace description, the model doesn't say
+    "I have nothing to check" -- it invents a plausible experiment. Reject
+    it before the model ever sees it.
+    """
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("create_message should never be called for a blank description")
+
+    monkeypatch.setattr(experiment, "create_message", _boom)
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        experiment.start_experiment("   ")
+
+
 def test_prelab_checklist_parse_failure_fails_closed_to_unresolved(monkeypatch):
     monkeypatch.setattr(experiment, "create_message", _fake_llm("not valid json at all"))
 
