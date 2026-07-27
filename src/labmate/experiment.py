@@ -53,9 +53,14 @@ clearly implied, and look each one up using lookup_sds, \
 lookup_biosafety_level, and search_sop_handbook. Do not rely on training \
 knowledge for any hazard claim -- only what these tools actually return.
 
-When you have looked up everything relevant, respond with ONLY strict \
-JSON, no other text, in this shape:
+When you have looked up everything relevant, STOP calling tools and \
+respond with ONLY strict JSON, no other text, in this exact shape:
 {"required_ppe": ["..."], "items": [{"item": "<reagent/organism/procedure>", "resolved": true or false, "hazard_summary": "<what the lookup said, or 'no matching entry found'>", "source": "<tool name or null>"}], "unresolved_count": <int>}
+
+This final checklist is your plain text response, never a tool call --\
+do not pass the checklist (or any of its fields) as arguments to \
+lookup_sds, lookup_biosafety_level, or search_sop_handbook. Those tools \
+only accept the single lookup argument each was defined with.
 
 A resolved: false item means no tool returned a match for it -- this is a \
 real gap the user or a human safety officer must acknowledge before \
@@ -89,6 +94,15 @@ checklist, escalation, or Q&A data provided -- you are synthesizing what \
 already happened, not performing new safety analysis.
 """
 
+_REFORMAT_SYSTEM_PROMPT = """\
+Convert the following into strict JSON, no other text, no explanation, \
+in exactly this shape:
+{"required_ppe": ["..."], "items": [{"item": "...", "resolved": true or false, "hazard_summary": "...", "source": "..."}], "unresolved_count": <int>}
+
+Preserve every item and every hazard_summary from the source text as \
+faithfully as possible -- do not invent new items, do not drop any.
+"""
+
 _MAX_PRELAB_TURNS = 6
 
 
@@ -113,7 +127,7 @@ def run_prelab(experiment_id: str, description: str) -> dict:
 
         if response.stop_reason != "tool_use":
             text = "".join(block.text for block in response.content if block.type == "text")
-            checklist = _parse_checklist(text)
+            checklist = _parse_checklist_with_reformat_retry(text)
             store.save_prelab_checklist(experiment_id, checklist)
             return checklist
 
@@ -135,20 +149,43 @@ def run_prelab(experiment_id: str, description: str) -> dict:
     return checklist
 
 
-def _parse_checklist(text: str) -> dict:
+def _parse_checklist_with_reformat_retry(text: str) -> dict:
+    """Observed live against Ollama/llama3.1: a weaker model can produce
+    plain prose instead of the requested JSON on its final turn, even with
+    an explicit instruction not to. Rather than failing closed immediately,
+    give it one narrower, tool-free retry -- "reformat what you just said
+    as JSON" is a much easier task than "search tools AND produce JSON,"
+    and removing tool access removes the main observed distraction (the
+    model stuffing the checklist into a tool call instead of ending the
+    turn). If the retry also fails to parse, the outcome is identical to
+    not retrying at all: fail closed, fully unresolved.
+    """
     try:
-        parsed = extract_json_object(text)
-        parsed.setdefault("required_ppe", [])
-        parsed.setdefault("items", [])
-        parsed.setdefault("unresolved_count", sum(1 for item in parsed["items"] if not item.get("resolved")))
-        return parsed
+        return _parse_checklist_strict(text)
+    except Exception:
+        pass
+
+    try:
+        response = create_message(
+            system=_REFORMAT_SYSTEM_PROMPT, messages=[{"role": "user", "content": text}], max_tokens=1024
+        )
+        retry_text = "".join(block.text for block in response.content if block.type == "text")
+        return _parse_checklist_strict(retry_text)
     except Exception as exc:
         return {
             "required_ppe": [],
             "items": [],
             "unresolved_count": 1,
-            "note": f"could not parse prelab checklist ({exc}) -- treat as fully unresolved, fail closed",
+            "note": f"could not parse prelab checklist even after a reformat retry ({exc}) -- treat as fully unresolved, fail closed",
         }
+
+
+def _parse_checklist_strict(text: str) -> dict:
+    parsed = extract_json_object(text)
+    parsed.setdefault("required_ppe", [])
+    parsed.setdefault("items", [])
+    parsed.setdefault("unresolved_count", sum(1 for item in parsed["items"] if not item.get("resolved")))
+    return parsed
 
 
 def sign_off(experiment_id: str, signed_off_by: str, acknowledge_unresolved: bool = False) -> dict:

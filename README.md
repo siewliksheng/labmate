@@ -2,7 +2,7 @@
 
 > A multi-agent lab assistant — literature, sample-image analysis, and safety — built around one non-negotiable rule: **no specialist ever clears a hazard on its own.**
 
-<!-- TODO: replace with a GIF of `python -m labmate.app`'s menus in action. -->
+<!-- TODO: replace with a GIF of `python -m labmate.web` in a browser. -->
 ![demo placeholder](docs/demo.gif)
 
 [![evals](https://github.com/siewliksheng/labmate/actions/workflows/evals.yml/badge.svg)](../../actions)
@@ -66,22 +66,27 @@ a Report — [see a real example](reports/example_report.md), built from
 genuine PubChem/biosafety-table lookups plus one deliberately unresolved
 item that required explicit human sign-off.
 
-The friendly way to run it — a menu-driven terminal app, arrow keys to
-select, no experiment IDs to copy around, no browser:
+The recommended way to run it — a real local website:
 
 ```bash
 uv sync
-PYTHONPATH=src python -m labmate.app
+python -m labmate.web
 ```
 
-One main menu — **Start a new experiment**, **Resolve a pending
-escalation**, **View a past report**, **Quit** — routes into guided,
-step-by-step screens: describing the experiment and reviewing the Prelab
-checklist (blocked on any unresolved item until you acknowledge it),
-a Lab-phase menu (ask a question / record a text or image observation /
-finish), and a report step that offers to open the generated HTML in your
-browser. Escalation resolution and browsing past reports are menus too,
-not separate commands to remember.
+Opens a browser to `http://127.0.0.1:8000` with pages for **Start a new
+experiment**, **Resolve a pending escalation**, and **View past
+reports** — plain HTML forms, no JS framework. Describing an experiment
+runs Prelab immediately (real SDS/biosafety/SOP lookups); the checklist
+page blocks sign-off on any unresolved item until you explicitly
+acknowledge it; the Lab page lets you ask questions and record text/image
+observations, with a running history on the page; finishing generates a
+report you can view right there (it's the same styled HTML from
+`report_render.py`).
+
+Prefer a terminal instead? `python -m labmate.app` is the same underlying
+functions through arrow-key select menus — no browser, and it works just
+as well; both interfaces are actively maintained, not one superseding the
+other.
 
 The same underlying steps are also available as scriptable subcommands
 (useful for automation, or targeting a past experiment by id):
@@ -93,10 +98,9 @@ PYTHONPATH=src python -m labmate.experiment record --kind text --content "OD600 
 PYTHONPATH=src python -m labmate.experiment report   # -> var/reports/<id>.md and .html
 ```
 
-(`start`/`report`, and `labmate.app`'s "Start a new experiment"/"Finish
-and generate report" screens, need an LLM backend — Anthropic or local
-Ollama, see "Stack" below. `signoff`/`record` and the rest of the app's
-menus don't.)
+(`start`/`report`, and the web/terminal apps' "start experiment"/"generate
+report" actions, need an LLM backend — Anthropic or local Ollama, see
+"Stack" below. `signoff`/`record` and everything else don't.)
 
 The gate itself can still be proven with **zero LLM calls** — a real,
 unresolved PubChem lookup is enough to force an escalation regardless of
@@ -210,12 +214,17 @@ not Inspect AI as originally planned in the roadmap — the scenario set
 and methodology (real tool calls + a stubbed worst-case LLM check) didn't
 need a framework, and adding one wasn't justified yet.
 
-The interactive front end (`labmate/app.py`) is a **terminal app**, not a
-web UI — built on **questionary** (arrow-key select menus, text/confirm
-prompts). If you're running in a shell without a native console handle
-(observed under git-bash/mintty on Windows), the menus themselves work
-fine, but stick to a proper terminal (Windows Terminal, PowerShell, macOS
-Terminal, VS Code's integrated terminal) for the smoothest experience.
+Two interactive front ends, both real, both maintained: `labmate/web.py`
+is a local **FastAPI** site (server-rendered Jinja2 templates, plain HTML
+forms, no JS framework — a step-by-step wizard doesn't need one), and
+`labmate/app.py` is a **terminal app** built on **questionary**
+(arrow-key select menus). Neither is a fallback for the other; they're
+two doors onto the same `labmate.experiment`/`labmate.review_queue`
+functions. If you're running the terminal app in a shell without a
+native console handle (observed under git-bash/mintty on Windows), the
+menus themselves work fine, but stick to a proper terminal (Windows
+Terminal, PowerShell, macOS Terminal, VS Code's integrated terminal) for
+the smoothest experience — or just use the website, which doesn't care.
 
 **Model backend is pluggable** (`src/labmate/llm_client.py`) — Claude by
 default, or a local **Ollama** model at zero cost via
@@ -252,17 +261,19 @@ PYTHONPATH=src python -m labmate.review_queue list
 PYTHONPATH=src python -m labmate.review_queue resolve 1 --decision confirmed_hazard --by "dr. lin" --note "..."
 ```
 
-There is no browser-based UI — `labmate.app` is a real terminal app
-instead (see "Stack"). "Previewing" this project means running the
-commands above, or reading `var/spans.jsonl`, `var/labmate_memory.db`,
-and `var/escalations.jsonl` after a run to see what actually happened.
+To preview without running anything interactive, read `var/spans.jsonl`,
+`var/labmate_memory.db`, and `var/escalations.jsonl` after a run to see
+what actually happened — or just open the website (`python -m labmate.web`)
+and click around.
 
 ## Project layout
 
 ```
 src/labmate/
   agent.py               # the active agent loop -- tools (M1), memory (M2), the gate (M3)
-  app.py                   # menu-driven terminal app (questionary) -- recommended entry point
+  web.py                   # local FastAPI website -- recommended entry point
+  templates/                # Jinja2 templates for web.py
+  app.py                   # menu-driven terminal app (questionary) -- alternative entry point
   experiment.py            # M4: Prelab -> Lab -> Report workflow + scriptable CLI
   redteam_eval.py            # M5: the eval suite runner
   review_queue.py              # M5: list/resolve pending escalations, CLI

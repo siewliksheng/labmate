@@ -142,6 +142,43 @@ portfolio artifact — not just whatever the code looks like at the end.
       there — replaced with plain `print()` + raw ANSI codes for the
       `say()` helper. Covered by `tests/test_app.py` (4 tests, all
       offline, real SQLite state).
+
+      **Second interface pass**, after actually trying the terminal app
+      and clarifying the real preference was a website: `labmate/web.py`
+      is a local FastAPI site — plain server-rendered HTML forms (no JS
+      framework; a step-by-step wizard doesn't need one), reusing the
+      exact same `labmate.experiment`/`labmate.review_queue` functions as
+      `app.py`. Both interfaces stay — `app.py` already worked and is
+      tested, this is the new recommended default, not a fix for a flaw
+      in the other one. One real design fix: the M4 "active experiment"
+      side-channel pointer was built for a single-session CLI; a website
+      can have several experiment pages open by URL at once, so
+      `POST /experiments/{id}/lab/ask` explicitly sets the active pointer
+      to the URL's id before calling the agent, rather than trusting
+      whatever was last active globally (verified with a test that starts
+      two experiments and confirms a question asked on experiment A's
+      page never gets tagged to B). Covered by `tests/test_web.py` (10
+      tests, via FastAPI's `TestClient` — real in-process HTTP, no
+      network or browser needed).
+
+      **First live run against a local model end-to-end** (previously
+      only individual pieces had been tested against Ollama) surfaced
+      three more real gaps, all fixed and locked in with tests:
+      - `guardrails._unresolved_lookups` didn't treat a *tool-call error*
+        (`llama3.1` calling a tool with a malformed argument name) as
+        unresolved — only an explicit `found: false`. A failed tool call
+        is exactly as unresolved as one that returned no match.
+      - `PRELAB_SYSTEM_PROMPT` needed an explicit "this is your final
+        answer, not a tool call" instruction after `llama3.1` was
+        observed stuffing its checklist into a `lookup_biosafety_level`
+        call instead of ending its turn with text.
+      - Even with that instruction, weaker models can still end on prose
+        instead of JSON — `_parse_checklist_with_reformat_retry` gives
+        one bounded, tool-free retry ("reformat what you just said as
+        JSON") before falling back to fail-closed, since removing tool
+        access removes the main observed distraction. Confirmed live:
+        real PubChem/biosafety data, one genuinely unresolved item
+        (EDTA), correctly blocking sign-off until acknowledged.
 - [ ] **M6 — Real orchestrator** _(orchestration)_
       Rebuild the orchestrator in LangGraph; parallel fan-out for mixed
       questions; the Hard Safety Gate becomes a dedicated graph node that

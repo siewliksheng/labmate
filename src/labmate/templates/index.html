@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}LabMate{% endblock %}
+{% block content %}
+<h1>LabMate</h1>
+<p class="muted">A lab assistant where no specialist ever clears a hazard on its own — every response passes through a Hard Safety Gate before it reaches you.</p>
+
+<div class="stack" style="margin-top: 1.75rem;">
+  <a class="btn block" href="/experiments/new">Start a new experiment</a>
+  <a class="btn secondary block" href="/escalations">Review pending escalations{% if pending_count %} ({{ pending_count }}){% endif %}</a>
+  <a class="btn secondary block" href="/reports">View past reports</a>
+</div>
+{% endblock %}

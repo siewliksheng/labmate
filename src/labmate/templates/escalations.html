@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Escalations — LabMate{% endblock %}
+{% block content %}
+<h1>Pending escalations</h1>
+
+{% if not pending %}
+<p class="muted">No pending escalations.</p>
+{% endif %}
+
+{% for entry in pending %}
+<div class="card">
+  <p class="muted">{{ entry.timestamp }} · {{ entry.urgency }}{% if entry.experiment_id %} · experiment {{ entry.experiment_id }}{% endif %}</p>
+  <p>{{ entry.summary }}</p>
+  <form method="post" action="/escalations/{{ loop.index }}/resolve">
+    <div class="field">
+      <label>Decision</label>
+      <select name="decision">
+        <option value="confirmed_hazard">Confirmed hazard</option>
+        <option value="false_positive">False positive</option>
+      </select>
+    </div>
+    <div class="field"><label>Your name</label><input type="text" name="resolved_by" required></div>
+    <div class="field"><label>Note (optional)</label><input type="text" name="note"></div>
+    <button class="btn" type="submit">Resolve</button>
+  </form>
+</div>
+{% endfor %}
+{% endblock %}

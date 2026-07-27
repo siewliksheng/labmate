@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Reports — LabMate{% endblock %}
+{% block content %}
+<h1>Past experiments</h1>
+
+{% if not experiments %}
+<p class="muted">No experiments yet.</p>
+{% endif %}
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>ID</th><th>Status</th><th>Description</th><th></th></tr></thead>
+<tbody>
+{% for exp in experiments %}
+<tr>
+  <td><code>{{ exp.id }}</code></td>
+  <td>{{ exp.status }}</td>
+  <td>{{ exp.description[:80] }}</td>
+  <td>
+    {% if exp.status == "reported" %}<a href="/experiments/{{ exp.id }}/report">View report</a>
+    {% elif exp.status == "lab" %}<a href="/experiments/{{ exp.id }}/lab">Go to Lab</a>
+    {% else %}<a href="/experiments/{{ exp.id }}/prelab">Go to Prelab</a>{% endif %}
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{% block title %}LabMate{% endblock %}</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --paper: #f2f5f5; --paper-raised: #ffffff; --ink: #16211f; --ink-soft: #4b5b58;
+    --rule: #d3dcda; --accent: #2f6f6b; --accent-soft: #e4eeed;
+    --ok: #2f7d4f; --ok-soft: #e5f2e9; --warn: #a6741a; --warn-soft: #faf0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #12191a; --paper-raised: #182121; --ink: #e7efee; --ink-soft: #a9bbb8;
+      --rule: #2a3735; --accent: #7cc2bb; --accent-soft: #1c2b2a;
+      --ok: #7fce9c; --ok-soft: #1a2b21; --warn: #e0b45c; --warn-soft: #2c2413;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px; line-height: 1.6; padding: 0 0 4rem;
+  }
+  .topbar {
+    background: var(--paper-raised); border-bottom: 1px solid var(--rule);
+    padding: 1rem 1.5rem; margin-bottom: 2rem;
+  }
+  .topbar .inner { max-width: 760px; margin: 0 auto; display: flex; align-items: baseline; gap: 1.5rem; }
+  .topbar a { color: var(--ink); text-decoration: none; font-size: 0.9rem; }
+  .topbar a.brand {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-weight: 600; font-size: 1.1rem; color: var(--accent);
+  }
+  .topbar a:not(.brand):hover { color: var(--accent); }
+  .container { max-width: 760px; margin: 0 auto; padding: 0 1.25rem; }
+  h1 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-weight: 600; font-size: 1.6rem; text-wrap: balance; margin: 0 0 1.2rem;
+  }
+  h3 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: 0.95rem; font-weight: 600; color: var(--ink-soft); margin: 0 0 0.9rem;
+  }
+  .card {
+    background: var(--paper-raised); border: 1px solid var(--rule); border-radius: 4px;
+    padding: 1.5rem; margin-bottom: 1.25rem;
+  }
+  .btn {
+    display: inline-block; padding: 0.65rem 1.3rem; border-radius: 4px;
+    background: var(--accent); color: white; text-decoration: none; border: none;
+    cursor: pointer; font-size: 0.95rem; font-family: inherit;
+  }
+  .btn.secondary { background: transparent; border: 1px solid var(--rule); color: var(--ink); }
+  .btn.block { display: block; width: 100%; text-align: center; }
+  .stack { display: flex; flex-direction: column; gap: 0.9rem; }
+  .field { margin-bottom: 1.1rem; }
+  label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.35rem; color: var(--ink-soft); }
+  label.inline { display: flex; align-items: center; gap: 0.5rem; font-weight: 400; }
+  input[type=text], textarea, select {
+    width: 100%; padding: 0.6rem 0.7rem; border: 1px solid var(--rule); border-radius: 4px;
+    font-family: inherit; font-size: 0.95rem; background: var(--paper-raised); color: var(--ink);
+  }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; margin-bottom: 1.25rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.65rem 0.8rem; vertical-align: top; }
+  thead th {
+    font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-soft); background: var(--accent-soft); font-weight: 600;
+  }
+  tbody tr + tr td { border-top: 1px solid var(--rule); }
+  .status-chip {
+    display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.15rem 0.55rem;
+    border-radius: 999px; font-size: 0.76rem; font-weight: 600;
+  }
+  .status-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .status-chip.resolved { background: var(--ok-soft); color: var(--ok); }
+  .status-chip.unresolved { background: var(--warn-soft); color: var(--warn); }
+  .callout {
+    background: var(--warn-soft); border-left: 3px solid var(--warn); border-radius: 0 4px 4px 0;
+    padding: 0.9rem 1.1rem; margin-bottom: 1.25rem; font-size: 0.9rem;
+  }
+  .muted { color: var(--ink-soft); font-size: 0.88rem; }
+  .qa-entry, .obs-entry { padding-bottom: 0.9rem; margin-bottom: 0.9rem; border-bottom: 1px solid var(--rule); }
+  .qa-entry:last-child, .obs-entry:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+  code { font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="inner">
+    <a class="brand" href="/">LabMate</a>
+    <a href="/experiments/new">New experiment</a>
+    <a href="/escalations">Escalations</a>
+    <a href="/reports">Reports</a>
+  </div>
+</div>
+<div class="container">
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>

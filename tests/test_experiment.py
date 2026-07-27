@@ -73,6 +73,39 @@ def test_prelab_checklist_parse_failure_fails_closed_to_unresolved(monkeypatch):
     assert result["checklist"]["unresolved_count"] >= 1
 
 
+def test_prelab_checklist_reformat_retry_succeeds_after_initial_prose(monkeypatch):
+    """Matches what was actually observed live against Ollama/llama3.1:
+    the model's final turn is prose, not JSON -- the retry (a second,
+    tool-free call asking it to reformat) gets a clean parse.
+    """
+    valid_checklist = {"required_ppe": ["gloves"], "items": [], "unresolved_count": 0}
+    responses = iter(
+        [
+            "The required PPE includes gloves. No unresolved items.",  # first turn: prose, not JSON
+            json.dumps(valid_checklist),  # reformat retry: clean JSON
+        ]
+    )
+
+    def _sequenced_llm(system, messages, tools=None, max_tokens=2048):
+        return SimpleNamespace(content=[SimpleNamespace(type="text", text=next(responses))], stop_reason="end_turn")
+
+    monkeypatch.setattr(experiment, "create_message", _sequenced_llm)
+
+    result = experiment.start_experiment("Some experiment")
+
+    assert result["checklist"]["unresolved_count"] == 0
+    assert result["checklist"]["required_ppe"] == ["gloves"]
+
+
+def test_prelab_checklist_fails_closed_when_retry_also_fails(monkeypatch):
+    monkeypatch.setattr(experiment, "create_message", _fake_llm("still not json, even on retry"))
+
+    result = experiment.start_experiment("Some experiment")
+
+    assert result["checklist"]["unresolved_count"] >= 1
+    assert "reformat retry" in result["checklist"]["note"]
+
+
 def test_record_observation_and_report_includes_it(monkeypatch):
     checklist = {"required_ppe": [], "items": [], "unresolved_count": 0}
     monkeypatch.setattr(experiment, "create_message", _fake_llm(json.dumps(checklist)))

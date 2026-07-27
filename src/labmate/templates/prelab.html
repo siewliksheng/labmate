@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Prelab — LabMate{% endblock %}
+{% block content %}
+<h1>{{ experiment.description }}</h1>
+<p class="muted">Status: {{ experiment.status }}</p>
+
+{% if checklist.get("note") %}
+<div class="callout">{{ checklist.note }}</div>
+{% endif %}
+
+{% if checklist.get("required_ppe") %}
+<p><strong>Required PPE:</strong> {{ checklist.required_ppe | join(", ") }}</p>
+{% endif %}
+
+<div class="table-wrap">
+<table>
+<thead><tr><th>Item</th><th>Status</th><th>Notes</th></tr></thead>
+<tbody>
+{% for item in checklist.get("items", []) %}
+<tr>
+  <td>{{ item.item }}</td>
+  <td>
+    {% if item.resolved %}<span class="status-chip resolved">Resolved</span>
+    {% else %}<span class="status-chip unresolved">Unresolved</span>{% endif %}
+  </td>
+  <td>{{ item.hazard_summary }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+
+{% if experiment.status == "prelab_ready" %}
+  {% if unresolved_count > 0 %}
+  <div class="callout">{{ unresolved_count }} item(s) are unresolved and must be acknowledged before Lab work starts.</div>
+  {% endif %}
+  <div class="card">
+    <form method="post" action="/experiments/{{ experiment.id }}/signoff">
+      <div class="field">
+        <label>Your name (for sign-off)</label>
+        <input type="text" name="signed_off_by" required>
+      </div>
+      {% if unresolved_count > 0 %}
+      <div class="field">
+        <label class="inline"><input type="checkbox" name="acknowledge_unresolved" value="yes" style="width:auto;">
+        I acknowledge the unresolved item(s) above and want to proceed anyway</label>
+      </div>
+      {% endif %}
+      <button class="btn" type="submit">Sign off and start Lab</button>
+    </form>
+  </div>
+{% else %}
+  <p>Signed off by <strong>{{ experiment.signed_off_by }}</strong> — <a href="/experiments/{{ experiment.id }}/lab">go to Lab</a></p>
+{% endif %}
+{% endblock %}

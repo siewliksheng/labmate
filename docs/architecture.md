@@ -176,13 +176,27 @@ Both are now locked in by unit tests (`tests/test_guardrails.py`), not
 just the eval run that found them — an eval catching a gap once is a
 one-time finding; a unit test is what prevents it from regressing.
 
-## Interface: a terminal app, not a browser page
+## Interface: two doors, not a hierarchy
 
-`labmate/app.py` is the human-facing entry point (menu-driven, arrow-key
-selection via `questionary`) — deliberately a real terminal app rather
-than a local web server, matching the earlier CLI-over-web-UI decision
-made for M4. It supersedes M4's plain-`input()` `wizard` subcommand
-outright, rather than keeping two overlapping interactive flows.
+`labmate/app.py` (terminal, arrow-key menus via `questionary`) and
+`labmate/web.py` (a local FastAPI site, plain server-rendered HTML forms)
+are both real, both maintained human-facing entry points onto the same
+`labmate.experiment`/`labmate.review_queue` functions. `app.py` came
+first and supersedes M4's plain-`input()` `wizard` subcommand outright
+(no reason to keep two overlapping terminal flows); `web.py` came second
+after actually trying the terminal app and clarifying the real preference
+was a website — it does not replace `app.py`, since that already worked
+correctly and is tested.
+
+The one real design fix `web.py` needed that `app.py` didn't: M4's
+"active experiment" side-channel pointer (`memory.store.get_active_experiment_id`)
+was built for a single-session CLI where exactly one experiment is ever
+"current." A website can have several experiment pages open by URL at
+once, so `POST /experiments/{id}/lab/ask` explicitly sets the active
+pointer to the URL's id immediately before calling the agent, rather than
+trusting whatever was last active globally — verified with a test that
+starts two experiments and confirms a question asked on one's page never
+gets tagged to the other.
 
 Every question the app asks goes through a thin named wrapper
 (`ask_select`/`ask_text`/`ask_confirm`) instead of calling questionary
@@ -198,6 +212,40 @@ native Win32 console handle — even though the actual `select`/`text`/
 `confirm` prompts worked fine in the same shell. Fixed by having the
 app's own `say()` helper use plain `print()` with raw ANSI color codes
 instead, sidestepping that codepath entirely.
+
+## Live testing against a local model found three more real gaps
+
+Everything through M5 had been tested against the real gate logic, but
+with the LLM call itself mocked or stubbed. Running the full loop live
+against Ollama/`llama3.1` for the first time — via the website — surfaced
+gaps none of the mocked tests could have:
+
+1. **A tool-call error wasn't treated as unresolved.** `llama3.1` called
+   `lookup_biosafety_level` with a malformed argument name; the call
+   errored inside `dispatch_tool` (`{"error": ...}`, no `found` key at
+   all), which the deterministic layer's `_unresolved_lookups` didn't
+   recognize — only an explicit `found: false`. A tool call that failed
+   to run is exactly as unresolved as one that returned no match; now
+   treated the same.
+2. **The model tried to submit its final answer as a tool call.**
+   `PRELAB_SYSTEM_PROMPT` said "respond with ONLY strict JSON" but didn't
+   say "and that means no more tool calls" — `llama3.1` repeatedly tried
+   stuffing the checklist into `lookup_biosafety_level`'s arguments
+   instead of ending its turn with text. Made the instruction explicit.
+3. **Even instructed correctly, a weaker model can still end on prose
+   instead of JSON.** Rather than failing closed on the first parse
+   failure, `_parse_checklist_with_reformat_retry` gives one bounded,
+   tool-free retry — "reformat what you just said as JSON" is a much
+   narrower task than "search tools and produce JSON," and removing tool
+   access removes the main observed distraction. If the retry also fails,
+   the outcome is identical to not retrying: fail closed, fully
+   unresolved. Confirmed live afterward: a real experiment produced a
+   correctly-parsed checklist with genuine PubChem/biosafety data and one
+   truly unresolved item (an untabulated reagent), correctly blocking
+   sign-off until acknowledged.
+
+All three are locked in by unit tests using the actual failure text/shape
+observed live, not synthetic examples.
 
 ## What is *not* in scope
 
