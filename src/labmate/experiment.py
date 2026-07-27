@@ -17,12 +17,19 @@ real lab notebook records deliberate entries, not a transcript of every
 conversation that happened nearby.
 
 generate_report() is a single synthesis call (no tools) over everything
-accumulated for the experiment, saved locally as Markdown
-(var/reports/<experiment_id>.md, never committed -- see reports/README.md
-for the one curated example kept in the repo). Sending it anywhere external
-(Google Docs, email, etc.) is explicitly out of scope here -- see
-reports/README.md and docs/architecture.md for why that's a separate,
-explicitly-confirmed action, not something this function does.
+accumulated for the experiment, saved locally as both Markdown and a
+styled HTML page (var/reports/<experiment_id>.{md,html}, never committed
+-- see reports/README.md for the one curated example kept in the repo).
+Sending it anywhere external (Google Docs, email, etc.) is explicitly out
+of scope here -- see reports/README.md and docs/architecture.md for why
+that's a separate, explicitly-confirmed action, not something this
+function does.
+
+The CLI has two entry points: the original scriptable subcommands
+(start/signoff/record/report, each taking an explicit experiment_id --
+useful for automation and tests), and `wizard`, an interactive guided
+flow for a human at a terminal that never asks you to type or copy an
+experiment_id at all.
 """
 
 import argparse
@@ -34,6 +41,7 @@ from labmate.memory import store
 from labmate.mcp_server.tools import TOOL_SCHEMAS as _ALL_TOOLS
 from labmate.mcp_server.tools import dispatch_tool
 from labmate.paths import VAR_DIR
+from labmate.report_render import render_report_html
 
 PRELAB_SYSTEM_PROMPT = """\
 You are running prelab safety preparation for a lab experiment the user \
@@ -69,8 +77,10 @@ safety event under results.
 3. Prelab safety checklist results (what was checked, what if anything \
 required sign-off, and who signed off).
 4. Observations / results, from the recorded lab observations, in order.
-5. Suggested next steps -- framed explicitly as a suggestion for the \
-researcher or PI to confirm, never as an instruction or a final decision.
+5. Suggested next steps -- write this section as a Markdown blockquote \
+(each line starting with "> "), since it is a suggestion for the \
+researcher or PI to confirm, never an instruction or a final decision, \
+and the blockquote formatting is what visually distinguishes it as such.
 
 Do not introduce any new safety claim that isn't already present in the \
 checklist, escalation, or Q&A data provided -- you are synthesizing what \
@@ -147,7 +157,7 @@ def record_observation(experiment_id: str, kind: str, content: str, note: str | 
     store.record_lab_observation(experiment_id, kind, content, note)
 
 
-def generate_report(experiment_id: str) -> str:
+def generate_report(experiment_id: str) -> dict:
     data = _gather_report_data(experiment_id)
 
     prompt = (
@@ -164,15 +174,20 @@ def generate_report(experiment_id: str) -> str:
     )
     report_text = "".join(block.text for block in response.content if block.type == "text")
 
-    reports_dir = VAR_DIR / "reports"
-    reports_dir.mkdir(exist_ok=True, parents=True)
-    report_path = reports_dir / f"{experiment_id}.md"
-    report_path.write_text(report_text, encoding="utf-8")
-
     store.mark_experiment_reported(experiment_id)
     store.set_active_experiment_id(None)
+    data["experiment"]["status"] = "reported"  # reflect the just-applied update; data was fetched before it
 
-    return str(report_path)
+    reports_dir = VAR_DIR / "reports"
+    reports_dir.mkdir(exist_ok=True, parents=True)
+
+    markdown_path = reports_dir / f"{experiment_id}.md"
+    markdown_path.write_text(report_text, encoding="utf-8")
+
+    html_path = reports_dir / f"{experiment_id}.html"
+    html_path.write_text(render_report_html(report_text, data["experiment"]), encoding="utf-8")
+
+    return {"markdown": str(markdown_path), "html": str(html_path)}
 
 
 def _gather_report_data(experiment_id: str) -> dict:
@@ -215,38 +230,137 @@ def _format_escalations(escalations: list[dict]) -> str:
     return "\n".join(f"- [{e['timestamp']}] ({e['urgency']}) {e['summary']}" for e in escalations)
 
 
+def _resolve_experiment_id(explicit_id: str | None) -> str:
+    """signoff/record/report all default to whichever experiment is
+    currently active (see memory.store.get_active_experiment_id) so a
+    human doesn't have to copy an id into every command -- pass one
+    explicitly only to target a different (e.g. already-closed) session.
+    """
+    if explicit_id:
+        return explicit_id
+    active = store.get_active_experiment_id()
+    if active is None:
+        raise SystemExit(
+            "No experiment_id given and no experiment is currently active. "
+            "Run `labmate.experiment start \"...\"` first, or pass an id explicitly."
+        )
+    return active
+
+
+def _print_checklist(checklist: dict) -> None:
+    ppe = checklist.get("required_ppe", [])
+    if ppe:
+        print(f"Required PPE: {', '.join(ppe)}")
+    for item in checklist.get("items", []):
+        mark = "[ok]" if item.get("resolved") else "[!! UNRESOLVED]"
+        print(f"  {mark} {item.get('item')} -- {item.get('hazard_summary')}")
+    if checklist.get("note"):
+        print(f"  note: {checklist['note']}")
+
+
+def run_wizard() -> None:
+    """An interactive, guided walk through Prelab -> Lab -> Report for a
+    human at a terminal. Never asks for an experiment_id -- it tracks the
+    one it just created via the same active-experiment pointer the
+    scriptable subcommands fall back to.
+    """
+    print("=== LabMate: new experiment ===\n")
+    description = input("What experiment do you want to run? ").strip()
+    if not description:
+        print("No description given, stopping.")
+        return
+
+    print("\nRunning prelab safety checks (real SDS/biosafety/SOP lookups)...\n")
+    result = start_experiment(description)
+    experiment_id = result["experiment_id"]
+    checklist = result["checklist"]
+    _print_checklist(checklist)
+
+    unresolved = [item for item in checklist.get("items", []) if not item.get("resolved")]
+    who = input("\nYour name (for sign-off): ").strip() or "unspecified"
+
+    if unresolved:
+        print(f"\n{len(unresolved)} item(s) are unresolved and must be acknowledged before lab work starts.")
+        ack = input("Acknowledge and proceed anyway? [y/N] ").strip().lower() == "y"
+        if not ack:
+            print(
+                f"\nNot signed off. Resume later with:\n"
+                f"  python -m labmate.experiment signoff {experiment_id} --by \"{who}\" --acknowledge-unresolved"
+            )
+            return
+        sign_off(experiment_id, who, acknowledge_unresolved=True)
+    else:
+        sign_off(experiment_id, who)
+
+    print(f"\nSigned off -- experiment {experiment_id} is now in Lab phase.")
+    print("Type a question for the lab assistant, 'record <text>' to log a value,")
+    print("'image <path> [note]' to log an image observation, or 'report' to finish.\n")
+
+    from labmate.agent import run as agent_run
+
+    while True:
+        line = input("lab> ").strip()
+        if not line:
+            continue
+        if line.lower() in {"report", "done", "finish"}:
+            break
+        if line.lower().startswith("record "):
+            record_observation(experiment_id, "text", line[len("record "):].strip())
+            print("Recorded.")
+            continue
+        if line.lower().startswith("image "):
+            rest = line[len("image "):].strip().split(" ", 1)
+            path, note = rest[0], (rest[1] if len(rest) > 1 else None)
+            record_observation(experiment_id, "image", path, note)
+            print("Recorded.")
+            continue
+        print(agent_run(line))
+
+    print("\nGenerating report...")
+    paths = generate_report(experiment_id)
+    print(f"\nDone. Report saved to:\n  {paths['markdown']}\n  {paths['html']}  (open this one in a browser)")
+
+
 def main():
     parser = argparse.ArgumentParser(prog="labmate.experiment")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    subparsers.add_parser("wizard", help="interactive guided flow -- recommended, no experiment_id needed")
 
     start_p = subparsers.add_parser("start", help="describe an experiment; runs prelab automatically")
     start_p.add_argument("description")
 
     signoff_p = subparsers.add_parser("signoff", help="sign off prelab to start lab work")
-    signoff_p.add_argument("experiment_id")
+    signoff_p.add_argument("experiment_id", nargs="?", default=None, help="defaults to the active experiment")
     signoff_p.add_argument("--by", required=True)
     signoff_p.add_argument("--acknowledge-unresolved", action="store_true")
 
     record_p = subparsers.add_parser("record", help="log a lab observation (text or image)")
-    record_p.add_argument("experiment_id")
+    record_p.add_argument("experiment_id", nargs="?", default=None, help="defaults to the active experiment")
     record_p.add_argument("--kind", choices=["text", "image"], required=True)
     record_p.add_argument("--content", required=True)
     record_p.add_argument("--note", default=None)
 
-    report_p = subparsers.add_parser("report", help="generate the Markdown report")
-    report_p.add_argument("experiment_id")
+    report_p = subparsers.add_parser("report", help="generate the report (Markdown + HTML)")
+    report_p.add_argument("experiment_id", nargs="?", default=None, help="defaults to the active experiment")
 
     args = parser.parse_args()
 
-    if args.command == "start":
+    if args.command == "wizard":
+        run_wizard()
+    elif args.command == "start":
         print(json.dumps(start_experiment(args.description), indent=2))
     elif args.command == "signoff":
-        print(json.dumps(sign_off(args.experiment_id, args.by, args.acknowledge_unresolved), indent=2))
+        experiment_id = _resolve_experiment_id(args.experiment_id)
+        print(json.dumps(sign_off(experiment_id, args.by, args.acknowledge_unresolved), indent=2))
     elif args.command == "record":
-        record_observation(args.experiment_id, args.kind, args.content, args.note)
+        experiment_id = _resolve_experiment_id(args.experiment_id)
+        record_observation(experiment_id, args.kind, args.content, args.note)
         print("recorded")
     elif args.command == "report":
-        print(f"Report saved to {generate_report(args.experiment_id)}")
+        experiment_id = _resolve_experiment_id(args.experiment_id)
+        paths = generate_report(experiment_id)
+        print(f"Report saved to:\n  {paths['markdown']}\n  {paths['html']}")
 
 
 if __name__ == "__main__":

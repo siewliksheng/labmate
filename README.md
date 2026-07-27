@@ -52,18 +52,33 @@ ad-hoc questions and recorded observations, and generate a Report —
 PubChem/biosafety-table lookups plus one deliberately unresolved item
 that required explicit human sign-off.
 
+The friendly way to run it — one guided command, no experiment IDs to
+copy around:
+
 ```bash
 uv sync
-PYTHONPATH=src python -m labmate.experiment start "DNA extraction from E. coli K-12 culture, ethanol precipitation, formaldehyde-fixed gel imaging"
-# -> prints an experiment_id + a checklist; any unresolved item blocks lab work
-PYTHONPATH=src python -m labmate.experiment signoff <experiment_id> --by "dr. lin" --acknowledge-unresolved
-PYTHONPATH=src python -m labmate.experiment record <experiment_id> --kind text --content "OD600 = 0.68 at harvest" --note "flask A"
-PYTHONPATH=src python -m labmate.experiment report <experiment_id>
-# -> Markdown report saved to var/reports/<experiment_id>.md
+PYTHONPATH=src python -m labmate.experiment wizard
 ```
 
-(The `start`/`report` steps need an LLM backend — Anthropic or local
-Ollama, see "Stack" below. `signoff` and `record` don't.)
+It walks you through describing the experiment, shows the Prelab
+checklist and blocks on any unresolved item until you acknowledge it,
+then drops you into a Lab prompt where you can ask questions, `record
+<value>` or `image <path> [note]`, and type `report` when done — which
+saves both a Markdown file and a styled HTML page you can open in a
+browser.
+
+The same steps are also available as scriptable subcommands (useful for
+automation, or targeting a past experiment by id):
+
+```bash
+PYTHONPATH=src python -m labmate.experiment start "DNA extraction from E. coli K-12 culture, ethanol precipitation, formaldehyde-fixed gel imaging"
+PYTHONPATH=src python -m labmate.experiment signoff --by "dr. lin" --acknowledge-unresolved   # defaults to the active experiment
+PYTHONPATH=src python -m labmate.experiment record --kind text --content "OD600 = 0.68 at harvest" --note "flask A"
+PYTHONPATH=src python -m labmate.experiment report   # -> var/reports/<id>.md and .html
+```
+
+(The `start`/`wizard`/`report` steps need an LLM backend — Anthropic or
+local Ollama, see "Stack" below. `signoff` and `record` don't.)
 
 The gate itself can still be proven with **zero LLM calls** — a real,
 unresolved PubChem lookup is enough to force an escalation regardless of

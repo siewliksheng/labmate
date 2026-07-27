@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DNA extraction from E. coli K-12 culture using a standard alkaline lys...</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --paper: #f2f5f5; --paper-raised: #ffffff; --ink: #16211f; --ink-soft: #4b5b58;
+    --rule: #d3dcda; --accent: #2f6f6b; --accent-soft: #e4eeed;
+    --warn: #a6741a; --warn-soft: #faf0dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #12191a; --paper-raised: #182121; --ink: #e7efee; --ink-soft: #a9bbb8;
+      --rule: #2a3735; --accent: #7cc2bb; --accent-soft: #1c2b2a;
+      --warn: #e0b45c; --warn-soft: #2c2413;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 16px; line-height: 1.65; padding: 3rem 1.25rem 5rem;
+  }
+  .sheet {
+    max-width: 720px; margin: 0 auto; background: var(--paper-raised);
+    border: 1px solid var(--rule); border-radius: 3px; padding: 2.5rem 3rem 3rem;
+  }
+  @media (max-width: 600px) { .sheet { padding: 2rem 1.25rem; } }
+  .eyebrow {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: 0.78rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 0.6rem;
+  }
+  .meta-row {
+    display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; padding-bottom: 1.3rem;
+    margin-bottom: 1.8rem; border-bottom: 1px solid var(--rule);
+    font-size: 0.86rem; color: var(--ink-soft);
+  }
+  .meta-row b { color: var(--ink); }
+  .sheet h1 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-weight: 600; font-size: 1.6rem; line-height: 1.3; text-wrap: balance;
+    margin: 0 0 1.1rem;
+  }
+  .sheet h2 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: 0.82rem; letter-spacing: 0.1em; text-transform: uppercase;
+    font-weight: 600; color: var(--ink-soft); margin: 2rem 0 0.9rem;
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  .sheet h2::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+  .sheet h2:first-of-type { margin-top: 0; }
+  .sheet p { margin: 0 0 0.9rem; }
+  .sheet ul, .sheet ol { padding-left: 1.3rem; margin: 0 0 0.9rem; }
+  .sheet li { margin-bottom: 0.4rem; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 3px; margin-bottom: 1rem; }
+  .sheet table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  .sheet th, .sheet td { text-align: left; padding: 0.65rem 0.8rem; vertical-align: top; }
+  .sheet thead th {
+    font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink-soft); background: var(--accent-soft); font-weight: 600;
+  }
+  .sheet tbody tr + tr td { border-top: 1px solid var(--rule); }
+  .sheet blockquote {
+    background: var(--accent-soft); border-left: 3px solid var(--accent);
+    border-radius: 0 3px 3px 0; margin: 0 0 1rem; padding: 0.9rem 1.1rem;
+  }
+  .sheet blockquote p:last-child { margin-bottom: 0; }
+  .sheet strong { color: var(--ink); }
+  .sheet code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-variant-numeric: tabular-nums; background: var(--accent-soft);
+    padding: 0.1em 0.35em; border-radius: 3px; font-size: 0.9em;
+  }
+  .provenance {
+    max-width: 720px; margin: 0 auto 1.25rem; padding: 0.9rem 1.1rem;
+    background: var(--accent-soft); border: 1px solid var(--rule); border-radius: 3px;
+    font-size: 0.85rem; color: var(--ink-soft); line-height: 1.55;
+  }
+  .provenance strong { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="provenance">
+  <strong>Provenance note</strong> (not part of the report itself, and not something a real generated report includes): the checklist data here is real -- a live PubChem lookup and the local biosafety table -- but the LLM synthesis call inside <code>generate_report()</code> was substituted with canned text, since no LLM backend was configured in the session that produced this committed example. See <code>reports/README.md</code>.
+</div>
+<div class="sheet">
+  <p class="eyebrow">LabMate &mdash; Experiment Report</p>
+  <div class="meta-row">
+    <span><b>Status:</b> reported</span>
+    <span><b>Signed off by:</b> dr. lin (PI)</span>
+    <span><b>Experiment ID:</b> <code>b1c577a9</code></span>
+  </div>
+  <h2>Escalations</h2>
+<p>None occurred during this experiment.</p>
+<h2>Summary</h2>
+<p>A plasmid DNA extraction was performed from an E. coli K-12 overnight culture using alkaline lysis and ethanol precipitation, with the resulting product visualized by formaldehyde-fixed gel electrophoresis.</p>
+<h2>Prelab Safety Checklist</h2>
+<table>
+<thead>
+<tr>
+<th>Item</th>
+<th>Status</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Formaldehyde (gel fixation)</td>
+<td>Resolved</td>
+<td>H302, H314, H330 -- fume hood + goggles required</td>
+</tr>
+<tr>
+<td>E. coli K-12 culture</td>
+<td>Resolved</td>
+<td>BSL-1 -- standard microbiological practices, non-pathogenic lab strain</td>
+</tr>
+<tr>
+<td>Ethanol (precipitation step)</td>
+<td>Unresolved, acknowledged</td>
+<td>No matching entry in the local biosafety/SDS lookup -- signed off by dr. lin (PI) with the gap explicitly acknowledged</td>
+</tr>
+</tbody>
+</table>
+<p>Required PPE: nitrile gloves, lab coat, safety goggles, fume hood for formaldehyde steps.</p>
+<h2>Observations / Results</h2>
+<ol>
+<li>Culture OD600 = 0.68 at harvest (t=4h) -- overnight culture, flask A</li>
+<li>Gel electrophoresis (image) -- single clean band ~1.2kb, consistent with expected plasmid size -- lane 3</li>
+<li>Yield: 42 ng/uL, A260/A280 = 1.87 -- Nanodrop reading post-extraction</li>
+</ol>
+<h2>Suggested Next Steps</h2>
+<blockquote>
+<p>A260/A280 of 1.87 is within the acceptable range for plasmid DNA but slightly below the 1.8-2.0 ideal window -- consider an additional wash step if downstream sensitive applications (e.g. sequencing) are planned.</p>
+<p>Since the ethanol hazard lookup came back unresolved, consider adding ethanol to the lab local SDS reference table so future prelab checks for this protocol resolve automatically.</p>
+</blockquote>
+</div>
+</body>
+</html>

@@ -92,9 +92,12 @@ def test_record_observation_and_report_includes_it(monkeypatch):
         )
 
     monkeypatch.setattr(experiment, "create_message", fake_report_call)
-    report_path = experiment.generate_report(experiment_id)
+    paths = experiment.generate_report(experiment_id)
 
-    assert "OD600" in Path(report_path).read_text(encoding="utf-8")
+    assert "OD600" in Path(paths["markdown"]).read_text(encoding="utf-8")
+    html_text = Path(paths["html"]).read_text(encoding="utf-8")
+    assert "OD600" in html_text
+    assert "<html" in html_text  # actually rendered, not just the raw markdown copied over
 
     exp = store.get_experiment(experiment_id)
     assert exp["status"] == "reported"

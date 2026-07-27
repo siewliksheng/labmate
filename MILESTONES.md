@@ -74,10 +74,25 @@ portfolio artifact — not just whatever the code looks like at the end.
       require explicit per-run confirmation, matching how this project
       treats every other side-effecting action). One curated example,
       built from genuine PubChem/biosafety-table lookups with one real
-      unresolved item, is committed at `reports/example_report.md` and
-      was also rendered live as an HTML Artifact. Covered by
+      unresolved item, is committed at `reports/example_report.{md,html}`
+      and was also rendered live as an HTML Artifact. Covered by
       `tests/test_experiment.py` (6 tests, no network or API key
       required — the LLM synthesis calls are monkeypatched).
+
+      **Interface pass**, after the first user walkthrough of the CLI
+      surfaced it as too raw: `labmate/report_render.py` renders every
+      report as styled HTML (`var/reports/<id>.html`) alongside the
+      Markdown, not just this one hand-built demo — generic Markdown→HTML
+      via `python-markdown`, deliberately not bespoke per-field widgets,
+      since that would be fragile against whatever exact wording the
+      model produces (blockquotes get an "advisory" callout treatment
+      because `REPORT_SYSTEM_PROMPT` asks for Suggested Next Steps to be
+      written as one). `signoff`/`record`/`report` now default their
+      `experiment_id` to whichever experiment is active, so a human never
+      has to copy one between commands. Added a `wizard` subcommand — a
+      guided, interactive walkthrough of the whole Prelab → Lab → Report
+      flow for a human at a terminal — as the recommended entry point,
+      alongside (not replacing) the original scriptable subcommands.
 - [ ] **M5 — Eval suite + review queue** _(evals, HITL)_
       Literature groundedness, vision accuracy vs. a labeled dataset, and
       the headline metric: safety-escalation recall on red-team cases

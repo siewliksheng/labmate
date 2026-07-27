@@ -1,13 +1,18 @@
 # Reports
 
-Real reports generate to `var/reports/<experiment_id>.md` at runtime and
-are never committed (see `.gitignore` -- they can contain whatever a user
-typed into an experiment description or lab observation).
+Real reports generate to `var/reports/<experiment_id>.{md,html}` at
+runtime and are never committed (see `.gitignore` -- they can contain
+whatever a user typed into an experiment description or lab observation).
 
-This folder holds one **curated example**, generated from a synthetic demo
-experiment with no real lab data involved, kept here as evidence of what
-`labmate.experiment.generate_report()` actually produces -- not just a
-claim in prose.
+This folder holds one **curated example** (`example_report.md` /
+`example_report.html`), generated from a synthetic demo experiment with
+no real lab data involved, kept here as evidence of what
+`labmate.experiment.generate_report()` + `labmate.report_render.render_report_html()`
+actually produce -- not just a claim in prose. Both files went through
+the real code path; only the LLM synthesis call was substituted with
+canned text, since no LLM backend was configured when this was generated
+(see the provenance note at the top of each file for exactly what that
+means for which part of the content).
 
 ## Delivery, deliberately scoped to local Markdown/HTML for now
 
