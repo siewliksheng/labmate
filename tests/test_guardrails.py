@@ -62,6 +62,27 @@ def test_deterministic_hazard_keyword_escalates_when_llm_agrees(monkeypatch):
     assert calls
 
 
+def test_deterministic_reasoning_not_masked_by_a_clear_llm_verdict(monkeypatch):
+    """Found by evals/redteam_safety while stubbing the LLM check to
+    "clear" (the worst-case eval methodology): the deterministic keyword
+    net fired, but the reported reasoning was the LLM's own "clear"
+    justification leaking through, not attributed to the check that
+    actually caused the escalation.
+    """
+    monkeypatch.setattr(
+        guardrails, "llm_groundedness_check", lambda *a, **kw: {"verdict": "clear", "reasoning": "looked fine to me"}
+    )
+    monkeypatch.setattr(guardrails, "dispatch_tool", lambda name, tool_input: {"escalated": True, "queued_at": "now"})
+
+    result = guardrails.enforce_safety_gate(
+        "literature", "tell me about this reagent", [], "It's safe to dispose of this down the drain."
+    )
+
+    assert result["verdict"] == "escalate"
+    assert "looked fine to me" not in result["reasoning"]
+    assert "hazard-keyword" in result["reasoning"]
+
+
 def test_llm_alone_can_trigger_escalation_with_no_deterministic_flag(monkeypatch):
     """A draft with none of the hardcoded hazard keywords should still
     escalate if the LLM groundedness check flags it -- proving the two
@@ -82,6 +103,58 @@ def test_llm_alone_can_trigger_escalation_with_no_deterministic_flag(monkeypatch
 
     assert result["verdict"] == "escalate"
     assert calls
+
+
+def test_vision_hazard_scan_findings_force_escalation_without_calling_llm(monkeypatch):
+    """docs/architecture.md gap #5 promised this from M1; it wasn't
+    actually wired into the gate until M5's eval suite exercised it.
+    """
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("llm_groundedness_check should not be called when the hazard-scan pass flagged something")
+
+    monkeypatch.setattr(guardrails, "llm_groundedness_check", _boom)
+    calls = []
+    monkeypatch.setattr(
+        guardrails,
+        "dispatch_tool",
+        lambda name, tool_input: calls.append((name, tool_input)) or {"escalated": True, "queued_at": "now"},
+    )
+
+    tool_call_log = [
+        {
+            "name": "analyze_image",
+            "input": {"image_path": "flask.jpg"},
+            "result": {
+                "found": True,
+                "description": "Cell culture flask, media appears normal in the central region.",
+                "hazard_scan_findings": "A hairline crack is visible along the flask's glass edge.",
+            },
+        }
+    ]
+    result = guardrails.enforce_safety_gate("vision", "does this culture look okay?", tool_call_log, "Looks fine to keep incubating.")
+
+    assert result["verdict"] == "escalate"
+    assert calls
+
+
+def test_vision_hazard_scan_no_findings_does_not_force_escalation(monkeypatch):
+    monkeypatch.setattr(guardrails, "llm_groundedness_check", lambda *a, **kw: {"verdict": "clear", "reasoning": "grounded"})
+
+    tool_call_log = [
+        {
+            "name": "analyze_image",
+            "input": {"image_path": "flask.jpg"},
+            "result": {
+                "found": True,
+                "description": "Cell culture flask, confluent monolayer.",
+                "hazard_scan_findings": "No findings -- no cracks, discoloration, or contamination observed.",
+            },
+        }
+    ]
+    result = guardrails.enforce_safety_gate("vision", "does this culture look okay?", tool_call_log, "This looks like a healthy, confluent monolayer.")
+
+    assert result["verdict"] == "clear"
 
 
 def test_llm_groundedness_check_fails_closed_on_error(monkeypatch):

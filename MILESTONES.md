@@ -93,11 +93,32 @@ portfolio artifact — not just whatever the code looks like at the end.
       guided, interactive walkthrough of the whole Prelab → Lab → Report
       flow for a human at a terminal — as the recommended entry point,
       alongside (not replacing) the original scriptable subcommands.
-- [ ] **M5 — Eval suite + review queue** _(evals, HITL)_
-      Literature groundedness, vision accuracy vs. a labeled dataset, and
-      the headline metric: safety-escalation recall on red-team cases
-      (target: 100%, zero false autonomous clearances). Human review queue
-      feeds resolved cases back into memory + the eval set.
+- [x] **M5 — Eval suite + review queue** _(evals, HITL)_
+      `labmate/redteam_eval.py` runs the 5 red-team + 5 benign-control
+      scenarios through the real `enforce_safety_gate`, with real
+      `lookup_sds`/`lookup_biosafety_level`/`search_sop_handbook` calls
+      where applicable, and `llm_groundedness_check` stubbed to always
+      return `"clear"` — the worst case, testing whether the
+      **deterministic layer alone** catches everything with no model in
+      the loop. Current result (`evals/results.md`): **100% recall, 100%
+      precision**, both earned honestly — building this suite *found and
+      fixed two real gaps*: `guardrails._vision_hazard_flagged` (the
+      vision hazard-scan pass routing to the gate, promised in M1's
+      docs/architecture.md but never actually wired in) and a reasoning-
+      attribution bug where a "clear" LLM verdict's own text leaked
+      through as the escalation reason when the deterministic check was
+      what actually fired. `tests/test_redteam_evals.py` is the real CI
+      regression gate (already runs as part of the existing unit-test
+      step, not a separate one). `labmate/review_queue.py` adds
+      `list_pending()`/`resolve()` — CLI-based per the M4 interface
+      decision — resolving updates the escalation in place in
+      `var/escalations.jsonl`; a `false_positive` resolution is flagged as
+      a manual-curation candidate for `evals/benign_control/`, not
+      auto-promoted. **Not built**: literature-groundedness and vision-
+      accuracy-vs-labeled-dataset evals (need volume LLM calls or a real
+      dataset download — see `evals/README.md`, explicit scope cut, not
+      silently dropped). Covered by `tests/test_redteam_evals.py` (2
+      tests) and `tests/test_review_queue.py` (5 tests), all offline.
 - [ ] **M6 — Real orchestrator** _(orchestration)_
       Rebuild the orchestrator in LangGraph; parallel fan-out for mixed
       questions; the Hard Safety Gate becomes a dedicated graph node that
@@ -113,4 +134,4 @@ portfolio artifact — not just whatever the code looks like at the end.
       trace replay/fork debugger; wire a CI gate that fails the build if
       escalation recall regresses.
 
-Currently on: **M4 complete → building M5.**
+Currently on: **M5 complete → building M6.**

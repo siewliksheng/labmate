@@ -142,6 +142,40 @@ category of action gets the same treatment this project already applies
 elsewhere: explicit confirmation on every use, not an automatic step
 folded into report generation. See `reports/README.md`.
 
+## M5 implementation notes: the eval suite found two real gaps
+
+The eval suite (`labmate/redteam_eval.py`) runs the real gate against
+executable versions of the 5 red-team scenarios and 5 new benign-control
+scenarios, with `llm_groundedness_check` stubbed to always return
+`"clear"` — the worst case, assuming the LLM judge is fooled. This
+measures whether the deterministic layer *alone* is sufficient, which is
+a stronger claim than "passed once against a live model" and the only one
+this suite can make honestly without a paid backend running at eval time.
+
+Building it surfaced two things that were wrong, not just untested:
+
+1. **The vision hazard-scan flag was never actually wired into the
+   gate.** docs/architecture.md's gap #5 (below) said a hazard-scan
+   finding should route to the gate "even if the descriptive pass came
+   back clean" — true in the vision specialist's prompt, but
+   `enforce_safety_gate` never checked `hazard_scan_findings` at all
+   before this milestone. Scenario 4 (Visual False Negative) is exactly
+   the case this was supposed to cover, and it would have failed without
+   `guardrails._vision_hazard_flagged`, added specifically because this
+   suite ran it and found the gap.
+2. **A "clear" LLM verdict's own reasoning text could mask a correct
+   deterministic escalation.** When the hazard-keyword net fired but the
+   (stubbed) LLM check said "clear," the returned `reasoning` field showed
+   the LLM's clear-justification text rather than attributing the
+   escalation to the check that actually caused it — cosmetically wrong,
+   but exactly the kind of thing a human reading a scorecard or an
+   escalation summary needs to trust. Fixed by only pulling reasoning from
+   the LLM verdict when the LLM itself said escalate.
+
+Both are now locked in by unit tests (`tests/test_guardrails.py`), not
+just the eval run that found them — an eval catching a gap once is a
+one-time finding; a unit test is what prevents it from regressing.
+
 ## What is *not* in scope
 
 This system does not attempt to autonomously classify novel hazards it has

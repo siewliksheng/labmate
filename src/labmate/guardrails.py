@@ -13,6 +13,10 @@ both must clear for a response to pass:
      the specialist did NOT call escalate_to_safety_officer afterward.
      "Not found" is never read as "not hazardous" -- see gap #4 in
      docs/architecture.md.
+   - analyze_image's hazard-scan pass returned non-empty findings.
+     docs/architecture.md gap #5 said this should route to the gate as
+     "hazard signal present" from M1 -- that promise wasn't actually
+     wired in until M5's eval suite exercised it and found the gap.
    - A hazard keyword appears in the draft response text itself.
 2. LLM groundedness check (labmate.llm_client, so it works against a
    local Ollama model or Claude): a separate call reviewing whether every
@@ -81,12 +85,33 @@ def enforce_safety_gate(specialist_name: str, user_input: str, tool_call_log: li
             specialist_name, user_input, tool_call_log, draft_text, reasoning=f"unresolved lookup(s): {names}"
         )
 
+    if _vision_hazard_flagged(tool_call_log):
+        return _force_escalate(
+            specialist_name,
+            user_input,
+            tool_call_log,
+            draft_text,
+            reasoning="analyze_image's hazard-scan pass flagged findings that require review, regardless of how the draft frames them",
+        )
+
     deterministic_flag = _contains_hazard_signal(draft_text)
     llm_verdict = llm_groundedness_check(user_input, specialist_name, tool_call_log, draft_text)
 
-    if deterministic_flag or llm_verdict["verdict"] == "escalate":
-        reasoning = llm_verdict.get("reasoning") or "deterministic hazard-keyword match in the draft response"
+    if llm_verdict["verdict"] == "escalate":
+        # Attribute to whichever check actually fired, even when both did --
+        # a scorecard reader needs to know it was the LLM's judgment, not
+        # let a truthy-but-unrelated "clear" reasoning string leak through.
+        reasoning = llm_verdict.get("reasoning") or "LLM groundedness check flagged this response"
         return _force_escalate(specialist_name, user_input, tool_call_log, draft_text, reasoning=reasoning)
+
+    if deterministic_flag:
+        return _force_escalate(
+            specialist_name,
+            user_input,
+            tool_call_log,
+            draft_text,
+            reasoning="deterministic hazard-keyword match in the draft response",
+        )
 
     return _clear(draft_text, "deterministic check and LLM groundedness check both cleared")
 
@@ -133,6 +158,26 @@ def _already_escalated(tool_call_log: list[dict]) -> bool:
 
 def _unresolved_lookups(tool_call_log: list[dict]) -> list[dict]:
     return [call for call in tool_call_log if isinstance(call["result"], dict) and call["result"].get("found") is False]
+
+
+# Deliberately generous phrases for "the hazard-scan pass found nothing" --
+# false negatives here (treating a real finding as "nothing") are the
+# expensive direction; false positives just mean an occasional benign scan
+# routes through the LLM check too, which is cheap.
+_EMPTY_HAZARD_SCAN_PHRASES = ("no findings", "none found", "nothing found", "no issues", "found nothing")
+
+
+def _vision_hazard_flagged(tool_call_log: list[dict]) -> bool:
+    for call in tool_call_log:
+        if call["name"] != "analyze_image":
+            continue
+        result = call.get("result")
+        if not isinstance(result, dict):
+            continue
+        findings = (result.get("hazard_scan_findings") or "").strip().lower()
+        if findings and not any(phrase in findings for phrase in _EMPTY_HAZARD_SCAN_PHRASES):
+            return True
+    return False
 
 
 def _contains_hazard_signal(text: str) -> bool:

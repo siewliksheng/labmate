@@ -13,11 +13,12 @@ jobs:
       - uses: astral-sh/setup-uv@v3
       - run: uv sync --all-extras
       - name: unit tests (no network)
+        # includes tests/test_redteam_evals.py -- this IS the "fails CI on
+        # regression" gate for the headline safety-escalation-recall metric,
+        # not a separate step (see evals/README.md for methodology).
         run: uv run pytest tests/ -v -m "not network"
       - name: integration tests (live PubMed/Europe PMC/PubChem)
         run: uv run pytest tests/ -v -m network
         continue-on-error: true # third-party API flakiness shouldn't block the build
-      # TODO: once the golden set + baseline scores exist, add a step here
-      # that runs the eval suite and fails the build on regression against
-      # evals/results.md (this is the "fails CI on regression" story from
-      # the README, not just a demo).
+      - name: print eval scorecard (visibility only, not a gate)
+        run: uv run python -m labmate.redteam_eval
