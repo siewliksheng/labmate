@@ -25,11 +25,13 @@ of scope here -- see reports/README.md and docs/architecture.md for why
 that's a separate, explicitly-confirmed action, not something this
 function does.
 
-The CLI has two entry points: the original scriptable subcommands
-(start/signoff/record/report, each taking an explicit experiment_id --
-useful for automation and tests), and `wizard`, an interactive guided
-flow for a human at a terminal that never asks you to type or copy an
-experiment_id at all.
+This module's own CLI is the scriptable subcommands (start/signoff/record/
+report, each taking an explicit experiment_id -- useful for automation
+and tests). The interactive, human-facing entry point is `labmate.app`
+(a menu-driven terminal app built on questionary) -- it calls the same
+functions defined here. An earlier plain-input()-based `wizard` subcommand
+lived here too; it's been removed in favor of `labmate.app` rather than
+keeping two overlapping interactive flows.
 """
 
 import argparse
@@ -247,85 +249,25 @@ def _resolve_experiment_id(explicit_id: str | None) -> str:
     return active
 
 
-def _print_checklist(checklist: dict) -> None:
+def format_checklist_lines(checklist: dict) -> list[str]:
+    """Shared formatting for displaying a prelab checklist -- used by
+    labmate.app's menu screens.
+    """
+    lines = []
     ppe = checklist.get("required_ppe", [])
     if ppe:
-        print(f"Required PPE: {', '.join(ppe)}")
+        lines.append(f"Required PPE: {', '.join(ppe)}")
     for item in checklist.get("items", []):
         mark = "[ok]" if item.get("resolved") else "[!! UNRESOLVED]"
-        print(f"  {mark} {item.get('item')} -- {item.get('hazard_summary')}")
+        lines.append(f"  {mark} {item.get('item')} -- {item.get('hazard_summary')}")
     if checklist.get("note"):
-        print(f"  note: {checklist['note']}")
-
-
-def run_wizard() -> None:
-    """An interactive, guided walk through Prelab -> Lab -> Report for a
-    human at a terminal. Never asks for an experiment_id -- it tracks the
-    one it just created via the same active-experiment pointer the
-    scriptable subcommands fall back to.
-    """
-    print("=== LabMate: new experiment ===\n")
-    description = input("What experiment do you want to run? ").strip()
-    if not description:
-        print("No description given, stopping.")
-        return
-
-    print("\nRunning prelab safety checks (real SDS/biosafety/SOP lookups)...\n")
-    result = start_experiment(description)
-    experiment_id = result["experiment_id"]
-    checklist = result["checklist"]
-    _print_checklist(checklist)
-
-    unresolved = [item for item in checklist.get("items", []) if not item.get("resolved")]
-    who = input("\nYour name (for sign-off): ").strip() or "unspecified"
-
-    if unresolved:
-        print(f"\n{len(unresolved)} item(s) are unresolved and must be acknowledged before lab work starts.")
-        ack = input("Acknowledge and proceed anyway? [y/N] ").strip().lower() == "y"
-        if not ack:
-            print(
-                f"\nNot signed off. Resume later with:\n"
-                f"  python -m labmate.experiment signoff {experiment_id} --by \"{who}\" --acknowledge-unresolved"
-            )
-            return
-        sign_off(experiment_id, who, acknowledge_unresolved=True)
-    else:
-        sign_off(experiment_id, who)
-
-    print(f"\nSigned off -- experiment {experiment_id} is now in Lab phase.")
-    print("Type a question for the lab assistant, 'record <text>' to log a value,")
-    print("'image <path> [note]' to log an image observation, or 'report' to finish.\n")
-
-    from labmate.agent import run as agent_run
-
-    while True:
-        line = input("lab> ").strip()
-        if not line:
-            continue
-        if line.lower() in {"report", "done", "finish"}:
-            break
-        if line.lower().startswith("record "):
-            record_observation(experiment_id, "text", line[len("record "):].strip())
-            print("Recorded.")
-            continue
-        if line.lower().startswith("image "):
-            rest = line[len("image "):].strip().split(" ", 1)
-            path, note = rest[0], (rest[1] if len(rest) > 1 else None)
-            record_observation(experiment_id, "image", path, note)
-            print("Recorded.")
-            continue
-        print(agent_run(line))
-
-    print("\nGenerating report...")
-    paths = generate_report(experiment_id)
-    print(f"\nDone. Report saved to:\n  {paths['markdown']}\n  {paths['html']}  (open this one in a browser)")
+        lines.append(f"  note: {checklist['note']}")
+    return lines
 
 
 def main():
     parser = argparse.ArgumentParser(prog="labmate.experiment")
     subparsers = parser.add_subparsers(dest="command", required=True)
-
-    subparsers.add_parser("wizard", help="interactive guided flow -- recommended, no experiment_id needed")
 
     start_p = subparsers.add_parser("start", help="describe an experiment; runs prelab automatically")
     start_p.add_argument("description")
@@ -346,9 +288,7 @@ def main():
 
     args = parser.parse_args()
 
-    if args.command == "wizard":
-        run_wizard()
-    elif args.command == "start":
+    if args.command == "start":
         print(json.dumps(start_experiment(args.description), indent=2))
     elif args.command == "signoff":
         experiment_id = _resolve_experiment_id(args.experiment_id)

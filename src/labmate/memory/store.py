@@ -268,6 +268,14 @@ def get_experiment(experiment_id: str) -> dict | None:
     return dict(row) if row else None
 
 
+def list_experiments() -> list[dict]:
+    with _connect() as conn:
+        rows = conn.execute(
+            "SELECT id, description, status, created_at FROM experiments ORDER BY id DESC"
+        ).fetchall()
+    return [dict(row) for row in rows]
+
+
 def save_prelab_checklist(experiment_id: str, checklist: dict) -> None:
     with _connect() as conn:
         conn.execute(

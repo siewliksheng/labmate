@@ -90,9 +90,10 @@ portfolio artifact — not just whatever the code looks like at the end.
       written as one). `signoff`/`record`/`report` now default their
       `experiment_id` to whichever experiment is active, so a human never
       has to copy one between commands. Added a `wizard` subcommand — a
-      guided, interactive walkthrough of the whole Prelab → Lab → Report
-      flow for a human at a terminal — as the recommended entry point,
-      alongside (not replacing) the original scriptable subcommands.
+      guided, interactive walkthrough for a human at a terminal — as the
+      recommended entry point, alongside the original scriptable
+      subcommands. (Superseded by `labmate/app.py` — see the M5 interface
+      pass below.)
 - [x] **M5 — Eval suite + review queue** _(evals, HITL)_
       `labmate/redteam_eval.py` runs the 5 red-team + 5 benign-control
       scenarios through the real `enforce_safety_gate`, with real
@@ -119,6 +120,28 @@ portfolio artifact — not just whatever the code looks like at the end.
       dataset download — see `evals/README.md`, explicit scope cut, not
       silently dropped). Covered by `tests/test_redteam_evals.py` (2
       tests) and `tests/test_review_queue.py` (5 tests), all offline.
+
+      **Interface pass**, after the user asked for something more
+      app-like than typed CLI commands — "select and step by step,"
+      explicitly not a browser page: `labmate/app.py` is a menu-driven
+      terminal app (arrow-key select menus, via `questionary`) tying
+      together the M4 workflow and the M5 review queue into one entry
+      point (Start a new experiment / Resolve a pending escalation / View
+      a past report / Quit). **Supersedes** the M4 `wizard` subcommand
+      outright rather than keeping two overlapping interactive flows —
+      `experiment.py`'s scriptable subcommands are unaffected. Every menu
+      question is a thin named wrapper (`ask_select`/`ask_text`/
+      `ask_confirm`) specifically so flow logic can be tested by
+      monkeypatching one call site per question, without mocking
+      questionary's `Question`/`.ask()` protocol directly. Found and
+      fixed a real portability issue while building it:
+      `questionary.print()` goes through `prompt_toolkit`'s full output-
+      detection stack and threw `NoConsoleScreenBufferError` under a
+      git-bash/mintty shell without a native Win32 console handle, even
+      though the actual `select`/`text`/`confirm` prompts work fine
+      there — replaced with plain `print()` + raw ANSI codes for the
+      `say()` helper. Covered by `tests/test_app.py` (4 tests, all
+      offline, real SQLite state).
 - [ ] **M6 — Real orchestrator** _(orchestration)_
       Rebuild the orchestrator in LangGraph; parallel fan-out for mixed
       questions; the Hard Safety Gate becomes a dedicated graph node that

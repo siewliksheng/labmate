@@ -2,7 +2,7 @@
 
 > A multi-agent lab assistant — literature, sample-image analysis, and safety — built around one non-negotiable rule: **no specialist ever clears a hazard on its own.**
 
-<!-- TODO: replace with a GIF of the wizard + review-queue CLI in action. -->
+<!-- TODO: replace with a GIF of `python -m labmate.app`'s menus in action. -->
 ![demo placeholder](docs/demo.gif)
 
 [![evals](https://github.com/siewliksheng/labmate/actions/workflows/evals.yml/badge.svg)](../../actions)
@@ -66,23 +66,25 @@ a Report — [see a real example](reports/example_report.md), built from
 genuine PubChem/biosafety-table lookups plus one deliberately unresolved
 item that required explicit human sign-off.
 
-The friendly way to run it — one guided command, no experiment IDs to
-copy around:
+The friendly way to run it — a menu-driven terminal app, arrow keys to
+select, no experiment IDs to copy around, no browser:
 
 ```bash
 uv sync
-PYTHONPATH=src python -m labmate.experiment wizard
+PYTHONPATH=src python -m labmate.app
 ```
 
-It walks you through describing the experiment, shows the Prelab
-checklist and blocks on any unresolved item until you acknowledge it,
-then drops you into a Lab prompt where you can ask questions, `record
-<value>` or `image <path> [note]`, and type `report` when done — which
-saves both a Markdown file and a styled HTML page you can open in a
-browser.
+One main menu — **Start a new experiment**, **Resolve a pending
+escalation**, **View a past report**, **Quit** — routes into guided,
+step-by-step screens: describing the experiment and reviewing the Prelab
+checklist (blocked on any unresolved item until you acknowledge it),
+a Lab-phase menu (ask a question / record a text or image observation /
+finish), and a report step that offers to open the generated HTML in your
+browser. Escalation resolution and browsing past reports are menus too,
+not separate commands to remember.
 
-The same steps are also available as scriptable subcommands (useful for
-automation, or targeting a past experiment by id):
+The same underlying steps are also available as scriptable subcommands
+(useful for automation, or targeting a past experiment by id):
 
 ```bash
 PYTHONPATH=src python -m labmate.experiment start "DNA extraction from E. coli K-12 culture, ethanol precipitation, formaldehyde-fixed gel imaging"
@@ -91,8 +93,10 @@ PYTHONPATH=src python -m labmate.experiment record --kind text --content "OD600 
 PYTHONPATH=src python -m labmate.experiment report   # -> var/reports/<id>.md and .html
 ```
 
-(The `start`/`wizard`/`report` steps need an LLM backend — Anthropic or
-local Ollama, see "Stack" below. `signoff` and `record` don't.)
+(`start`/`report`, and `labmate.app`'s "Start a new experiment"/"Finish
+and generate report" screens, need an LLM backend — Anthropic or local
+Ollama, see "Stack" below. `signoff`/`record` and the rest of the app's
+menus don't.)
 
 The gate itself can still be proven with **zero LLM calls** — a real,
 unresolved PubChem lookup is enough to force an escalation regardless of
@@ -204,9 +208,14 @@ Claude Sonnet 5 (vision + reasoning) + Haiku 4.5 (routing) · MCP (FastMCP)
 The eval suite (M5) is a small custom runner (`labmate/redteam_eval.py`),
 not Inspect AI as originally planned in the roadmap — the scenario set
 and methodology (real tool calls + a stubbed worst-case LLM check) didn't
-need a framework, and adding one wasn't justified yet. The review queue
-(`labmate/review_queue.py`) is CLI-based, consistent with the M4 interface
-decision, not a web UI.
+need a framework, and adding one wasn't justified yet.
+
+The interactive front end (`labmate/app.py`) is a **terminal app**, not a
+web UI — built on **questionary** (arrow-key select menus, text/confirm
+prompts). If you're running in a shell without a native console handle
+(observed under git-bash/mintty on Windows), the menus themselves work
+fine, but stick to a proper terminal (Windows Terminal, PowerShell, macOS
+Terminal, VS Code's integrated terminal) for the smoothest experience.
 
 **Model backend is pluggable** (`src/labmate/llm_client.py`) — Claude by
 default, or a local **Ollama** model at zero cost via
@@ -235,25 +244,26 @@ uv run python -m labmate.agent "is this reagent dangerous if I spill it?"
 uv run python -m labmate.agent "what is this?" --image path/to/sample.jpg
 ```
 
-To review and resolve any pending escalations (no LLM needed):
+To review and resolve any pending escalations without the menu (no LLM
+needed either way):
 
 ```bash
 PYTHONPATH=src python -m labmate.review_queue list
 PYTHONPATH=src python -m labmate.review_queue resolve 1 --decision confirmed_hazard --by "dr. lin" --note "..."
 ```
 
-There is no visual UI — the review queue and the wizard are both
-deliberately CLI-based (see "Stack"). "Previewing" this project means
-running the commands above, or reading `var/spans.jsonl`,
-`var/labmate_memory.db`, and `var/escalations.jsonl` after a run to see
-what actually happened.
+There is no browser-based UI — `labmate.app` is a real terminal app
+instead (see "Stack"). "Previewing" this project means running the
+commands above, or reading `var/spans.jsonl`, `var/labmate_memory.db`,
+and `var/escalations.jsonl` after a run to see what actually happened.
 
 ## Project layout
 
 ```
 src/labmate/
   agent.py               # the active agent loop -- tools (M1), memory (M2), the gate (M3)
-  experiment.py            # M4: Prelab -> Lab -> Report workflow + CLI
+  app.py                   # menu-driven terminal app (questionary) -- recommended entry point
+  experiment.py            # M4: Prelab -> Lab -> Report workflow + scriptable CLI
   redteam_eval.py            # M5: the eval suite runner
   review_queue.py              # M5: list/resolve pending escalations, CLI
   orchestrator.py         # M0 hardcoded routing -- kept as a deterministic

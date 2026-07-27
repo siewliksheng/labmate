@@ -176,6 +176,29 @@ Both are now locked in by unit tests (`tests/test_guardrails.py`), not
 just the eval run that found them — an eval catching a gap once is a
 one-time finding; a unit test is what prevents it from regressing.
 
+## Interface: a terminal app, not a browser page
+
+`labmate/app.py` is the human-facing entry point (menu-driven, arrow-key
+selection via `questionary`) — deliberately a real terminal app rather
+than a local web server, matching the earlier CLI-over-web-UI decision
+made for M4. It supersedes M4's plain-`input()` `wizard` subcommand
+outright, rather than keeping two overlapping interactive flows.
+
+Every question the app asks goes through a thin named wrapper
+(`ask_select`/`ask_text`/`ask_confirm`) instead of calling questionary
+directly inline — the only reason is testability: flow logic can be
+verified by monkeypatching one call site per question with a scripted
+answer sequence, without needing to mock questionary's `Question`/
+`.ask()` object protocol in every test.
+
+Building it found a real portability issue: `questionary.print()` routes
+through `prompt_toolkit`'s full output-detection stack, which threw
+`NoConsoleScreenBufferError` under a git-bash/mintty shell lacking a
+native Win32 console handle — even though the actual `select`/`text`/
+`confirm` prompts worked fine in the same shell. Fixed by having the
+app's own `say()` helper use plain `print()` with raw ANSI color codes
+instead, sidestepping that codepath entirely.
+
 ## What is *not* in scope
 
 This system does not attempt to autonomously classify novel hazards it has
