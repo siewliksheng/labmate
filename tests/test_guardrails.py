@@ -181,6 +181,64 @@ def test_vision_hazard_scan_no_findings_does_not_force_escalation(monkeypatch):
     assert result["verdict"] == "clear"
 
 
+def test_hazard_pattern_does_not_false_positive_on_substrings():
+    """Naive substring matching fired on "p(harm)aceutical" and "(safe)ty",
+    which would escalate essentially every pharma or lab-safety-adjacent
+    literature answer. Word-boundary matching fixes it.
+    """
+    assert not guardrails._contains_hazard_signal("Recent pharmaceutical research on this compound.")
+    assert not guardrails._contains_hazard_signal("The paper discusses laboratory safety culture.")
+    assert not guardrails._contains_hazard_signal("Long exposures were used to image the sample.")
+
+
+def test_hazard_pattern_still_catches_real_hazard_language():
+    for text in [
+        "It's safe to dispose of this down the drain.",
+        "This reagent is harmless at that concentration.",
+        "There is no exposure hazard here.",
+        "That should be okay to do.",
+        "The compound is nontoxic.",
+        # Compound word -- the eval suite caught this being silently
+        # dropped when substring matching became word-boundary matching.
+        "Put the towels in the biohazard bin, should be fine.",
+    ]:
+        assert guardrails._contains_hazard_signal(text), text
+
+
+def test_gate_prompt_is_specialist_aware():
+    safety_prompt = guardrails._gate_prompt_for("safety")
+    literature_prompt = guardrails._gate_prompt_for("literature")
+
+    assert "every factual claim in the draft traces to a retrieved tool" in safety_prompt
+    assert "Reporting a lack of information is not a safety claim" in literature_prompt
+    assert safety_prompt != literature_prompt
+
+
+def test_literature_draft_reporting_no_findings_is_not_escalated(monkeypatch):
+    """The exact failure the user hit: a literature answer saying "I
+    couldn't find specifics, here are related papers" was escalated for
+    "claiming an optimal temperature without a matching SDS entry."
+    """
+    monkeypatch.setattr(
+        guardrails, "llm_groundedness_check", lambda *a, **kw: {"verdict": "clear", "reasoning": "no safety claim made"}
+    )
+
+    draft = (
+        "Based on the search results, I was unable to find specific information regarding "
+        "optimal temperature and crosslinking time for PNIPAM hydrogels in microfluidic channels. "
+        "However, the paper 'Lower Critical Solution Temperature Phase Transition' may be relevant."
+    )
+    result = guardrails.enforce_safety_gate(
+        "literature",
+        "What is the optimal crosslinking time for PNIPAM hydrogel?",
+        [{"name": "search_pubmed", "input": {"query": "PNIPAM"}, "result": {"results": [{"pmid": "1"}]}}],
+        draft,
+    )
+
+    assert result["verdict"] == "clear"
+    assert result["response_text"] == draft
+
+
 def test_llm_groundedness_check_fails_closed_on_error(monkeypatch):
     def _raise(*_args, **_kwargs):
         raise ConnectionError("no backend configured")

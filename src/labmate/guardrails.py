@@ -17,17 +17,27 @@ both must clear for a response to pass:
      docs/architecture.md gap #5 said this should route to the gate as
      "hazard signal present" from M1 -- that promise wasn't actually
      wired in until M5's eval suite exercised it and found the gap.
-   - A hazard keyword appears in the draft response text itself.
+   - A hazard keyword appears in the draft response text itself
+     (_HAZARD_PATTERN below).
 2. LLM groundedness check (labmate.llm_client, so it works against a
-   local Ollama model or Claude): a separate call reviewing whether every
-   claim in the draft is backed by a source actually retrieved this turn.
-   Runs via labmate.llm_client, which is pluggable -- see its module
-   docstring for the local-vs-Claude tradeoff. Fails CLOSED to escalate
-   on any error (network, parsing, no backend configured) -- "you are
-   required to justify clearance," per docs/system_prompts.md.
+   local Ollama model or Claude): a separate call reviewing the draft
+   against what was actually retrieved this turn. Runs via
+   labmate.llm_client, which is pluggable -- see its module docstring for
+   the local-vs-Claude tradeoff. Fails CLOSED to escalate on any error
+   (network, parsing, no backend configured) -- "you are required to
+   justify clearance," per docs/system_prompts.md.
+
+   The rules it applies are SPECIALIST-AWARE (_gate_prompt_for): strict
+   full-groundedness for the safety specialist, narrower
+   "did this stray into ungrounded safety territory" rules for
+   literature/vision. The gate still runs on every specialist -- that
+   part is non-negotiable -- but asking "does every research fact have an
+   SDS entry behind it" of a literature answer escalated essentially
+   everything, including drafts that made no safety claim at all. See
+   docs/architecture.md.
 
 Known limitation, not hidden: the deterministic hazard-keyword check is a
-small hardcoded list (see _HAZARD_KEYWORDS below), not a hazard-entity
+small hardcoded pattern (_HAZARD_PATTERN below), not a hazard-entity
 lookup -- it can miss a genuinely novel, unnamed hazard that the LLM
 groundedness check also doesn't happen to flag. This is exactly why M6
 adds a dedicated cross-specialist reviewer on top of what's here, not a
@@ -35,26 +45,44 @@ claim that this gate is already complete.
 """
 
 import json
+import re
 
 from labmate.json_utils import extract_json_object
 from labmate.llm_client import create_message
 from labmate.mcp_server.tools import dispatch_tool
 
-# Deliberately the same crude, hardcoded shape as orchestrator.py's
-# SAFETY_KEYWORDS -- applied here to OUTPUT text instead of the user's
-# input. A model can be argued with; a substring match cannot.
-_HAZARD_KEYWORDS = ("safe", "danger", "hazard", "toxic", "dispose", "expose", "harm", "fine to", "should be okay")
+# Same crude, hardcoded spirit as orchestrator.py's SAFETY_KEYWORDS, but
+# applied to OUTPUT text instead of the user's input. A model can be
+# argued with; a regex cannot.
+#
+# Word-boundary matched, with variants spelled out explicitly, after
+# naive substring matching was found to fire on "p(harm)aceutical" and
+# "(safe)ty" -- which would escalate essentially every pharma or
+# lab-safety-adjacent literature answer. Variants are listed rather than
+# stemmed so each one is a deliberate choice: "harmless" IS included,
+# since downplaying a hazard is exactly what this net should catch.
+_HAZARD_PATTERN = re.compile(
+    r"\b("
+    r"safe|safely|unsafe"
+    r"|danger|dangers|dangerous"
+    # "biohazard"/"biohazardous" spelled out: the eval suite caught the
+    # word-boundary change silently dropping the formaldehyde-spill
+    # scenario, which the old substring match had been catching via
+    # "bio(hazard)". Compound words need to be listed, not assumed.
+    r"|hazard|hazards|hazardous|biohazard|biohazards|biohazardous"
+    r"|toxic|toxicity|nontoxic|non-toxic"
+    r"|dispose|disposal|disposing"
+    r"|expose|exposed|exposure"
+    r"|harm|harmful|harmless"
+    # Reassurance phrasing -- the shape of a draft waving away a concern.
+    r"|fine to|should be fine|should be okay|perfectly fine|no big deal"
+    r")\b",
+    re.IGNORECASE,
+)
 
-_GATE_EVALUATOR_SYSTEM_PROMPT = """\
-You are the safety gate for LabMate. You review a draft response before \
-it reaches a lab member. You do not rewrite or improve the draft -- you \
-decide whether it may be released as-is, or must be blocked and \
-escalated to a human safety officer instead.
-
-You will be given the original user request, which specialist produced \
-the draft, the tools that specialist actually called this turn and what \
-they returned, and the draft response itself.
-
+# The strict rules -- correct for a draft that IS a safety verdict, where
+# "every claim traces to a retrieved source" is exactly the bar.
+_SAFETY_GATE_RULES = """\
 Escalate -- do not release -- if ANY of the following is true:
 1. The draft makes a claim about safety, hazard level, or an action \
 being permissible, that is not directly backed by one of the retrieved \
@@ -68,10 +96,60 @@ to justify clearance.
 
 Only if every factual claim in the draft traces to a retrieved tool \
 result, and none of the above apply, may you clear the draft for release.
-
-Respond with ONLY strict JSON, no other text:
-{"verdict": "clear" or "escalate", "reasoning": "<one sentence>"}
 """
+
+# Narrower rules for literature/vision drafts. The gate still runs on
+# every specialist -- a hazard CAN hide in a literature summary, which is
+# the whole reason for that design (docs/architecture.md) -- but the
+# question being asked has to be the right one. Applying the safety rules
+# above to a research answer escalated essentially everything: a draft
+# saying "I couldn't find specifics, here are three related papers"
+# makes no safety claim at all, yet got flagged for "claiming an optimal
+# temperature without a matching SDS entry." What matters for these
+# specialists is whether the draft strays into safety territory
+# ungrounded, not whether every research fact has an SDS entry behind it.
+_NON_SAFETY_GATE_RULES = """\
+This draft came from a research/observation specialist, not the safety \
+specialist. It is NOT expected to be a safety assessment, and ordinary \
+research content does not need a safety source behind it.
+
+Escalate -- do not release -- if ANY of the following is true:
+1. The draft asserts that something is safe, harmless, permissible, or \
+low-risk, without a retrieved tool result directly supporting that.
+2. The draft recommends or endorses a specific physical action with \
+plausible injury, exposure, contamination, or disposal risk.
+3. The draft downplays, dismisses, or explains away a hazard, an \
+unresolved lookup, or a flagged finding.
+4. The draft mentions a substance, organism, or procedure in a way that \
+implies it has been safety-checked when it has not.
+
+Otherwise -- including when the draft simply reports findings, \
+summarizes papers, describes an image, or says it could not find \
+something -- clear it. Reporting a lack of information is not a safety \
+claim. Discussing experimental parameters (temperatures, times, \
+concentrations) as reported in the literature is not a safety claim \
+unless the draft asserts they are safe to use.
+"""
+
+_GATE_EVALUATOR_SYSTEM_PROMPT = """\
+You are the safety gate for LabMate. You review a draft response before \
+it reaches a lab member. You do not rewrite or improve the draft -- you \
+decide whether it may be released as-is, or must be blocked and \
+escalated to a human safety officer instead.
+
+You will be given the original user request, which specialist produced \
+the draft, the tools that specialist actually called this turn and what \
+they returned, and the draft response itself.
+
+{rules}
+Respond with ONLY strict JSON, no other text:
+{{"verdict": "clear" or "escalate", "reasoning": "<one sentence>"}}
+"""
+
+
+def _gate_prompt_for(specialist_name: str) -> str:
+    rules = _SAFETY_GATE_RULES if specialist_name == "safety" else _NON_SAFETY_GATE_RULES
+    return _GATE_EVALUATOR_SYSTEM_PROMPT.format(rules=rules)
 
 
 def enforce_safety_gate(specialist_name: str, user_input: str, tool_call_log: list[dict], draft_text: str) -> dict:
@@ -131,7 +209,7 @@ def llm_groundedness_check(user_input: str, specialist_name: str, tool_call_log:
             f"Draft response to review:\n{draft_text}"
         )
         response = create_message(
-            system=_GATE_EVALUATOR_SYSTEM_PROMPT, messages=[{"role": "user", "content": prompt}], max_tokens=256
+            system=_gate_prompt_for(specialist_name), messages=[{"role": "user", "content": prompt}], max_tokens=256
         )
         text = "".join(block.text for block in response.content if getattr(block, "type", None) == "text")
         return _parse_verdict(text)
@@ -191,8 +269,7 @@ def _vision_hazard_flagged(tool_call_log: list[dict]) -> bool:
 
 
 def _contains_hazard_signal(text: str) -> bool:
-    lowered = text.lower()
-    return any(keyword in lowered for keyword in _HAZARD_KEYWORDS)
+    return _HAZARD_PATTERN.search(text) is not None
 
 
 def _force_escalate(specialist_name: str, user_input: str, tool_call_log: list[dict], draft_text: str, reasoning: str) -> dict:
